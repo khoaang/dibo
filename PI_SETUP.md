@@ -1,0 +1,135 @@
+# Raspberry Pi 4B Setup Guide for Dibo Tracker
+
+This guide will help you set up your Raspberry Pi 4B with the Hosyond 7" Touch Screen to run the Dibo Tracker automatically on boot.
+
+## 1. Hardware Setup
+1.  **Mount the Pi**: Attach your Raspberry Pi 4B to the back of the screen if possible, or place it securely nearby.
+2.  **Connect HDMI**:
+    *   The Raspberry Pi 4B uses **Micro-HDMI** ports.
+    *   Use the **Micro-HDMI to HDMI adapter** (or cable) to connect the Pi's Micro-HDMI port (use **HDMI0**, the one closest to the USB-C power port) to the screen's HDMI port.
+3.  **Connect Touch**: Use the Micro-USB cable to connect the screen's "Touch" port to one of the Pi's USB ports (USB 2.0 or 3.0 works fine).
+4.  **Power**: Connect your USB-C power supply to the Pi's power port. The screen will draw power from the Pi via the USB connection, or you can power the screen separately if needed (but the USB data connection is mandatory for touch).
+
+## 2. OS Installation
+1.  Download and install the [Raspberry Pi Imager](https://www.raspberrypi.com/software/).
+2.  Insert your microSD card into your computer.
+3.  **Choose OS**: Select **Raspberry Pi OS (Legacy, 64-bit) Desktop**.
+    *   *Why Legacy?* While the Pi 4B runs the standard Wayland-based OS well, the **Legacy (X11)** version is much easier to configure for simple kiosk scripts (using `unclutter` and display commands).
+4.  **Settings (Gear Icon)**:
+    *   Set hostname: `dibo-pi`
+    *   Enable SSH (optional, but recommended for remote management).
+    *   Set username: `pi`
+    *   Set password: `your_password`
+    *   Configure Wireless LAN: Enter your WiFi SSID and Password.
+    *   Set locale settings (Time zone: Asia/Ho_Chi_Minh, Keyboard: US).
+5.  **Write**: Flash the OS to the card.
+
+## 3. First Boot & Configuration
+1.  Insert the SD card into the Pi and power it up.
+2.  Wait for it to boot.
+3.  Open a Terminal on the Pi (or SSH in).
+4.  **Update System**:
+    ```bash
+    sudo apt update && sudo apt upgrade -y
+    ```
+5.  **Install Node.js**:
+    *   **Check Architecture**: Run `uname -m`.
+    *   **If `aarch64` (64-bit)**:
+        ```bash
+        curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+        sudo apt-get install -y nodejs
+        ```
+    *   **If `armv7l` (32-bit)**:
+        The NodeSource script doesn't support 32-bit. Use the system packages instead (Node 18 is sufficient):
+        ```bash
+        sudo apt install -y nodejs npm
+        ```
+6.  **Install Utilities**:
+    We need `unclutter` to hide the mouse cursor and `git` to download the code.
+    ```bash
+    sudo apt install -y unclutter git
+    ```
+7.  **Install Serve**:
+    A simple web server to serve the app.
+    ```bash
+    sudo npm install -g serve
+    ```
+
+## 4. Screen Configuration (If Needed)
+If the screen resolution looks wrong (black bars or fuzzy), you need to edit `/boot/config.txt`.
+1.  Open the config file:
+    ```bash
+    sudo nano /boot/config.txt
+    ```
+2.  Add the following lines to the end of the file (based on Hosyond 7" specs):
+    ```ini
+    hdmi_group=2
+    hdmi_mode=87
+    hdmi_cvt 1024 600 60 6 0 0 0
+    hdmi_drive=1
+    ```
+3.  Save and exit (`Ctrl+X`, then `Y`, then `Enter`).
+4.  Reboot: `sudo reboot`.
+
+## 5. Deploy the App
+
+1.  **Transfer the Project**:
+    You can use `scp` to copy the files from your computer to the Pi.
+    ```bash
+    # Run this on your computer (not the Pi)
+    # Replace 'pi' with your username and 'dibo-pi' with your hostname/IP
+    scp -r dibo-tracker pi@dibo-pi:/home/pi/
+    ```
+
+2.  **Install Dependencies & Build**:
+    On the Pi:
+    ```bash
+    cd /home/pi/dibo-tracker
+    npm install
+    npm run build
+    ```
+
+3.  **Make the Startup Script Executable**:
+    ```bash
+    chmod +x start-kiosk.sh
+    ```
+
+## 6. Setup Autostart (Kiosk Mode)
+
+We will use the LXDE autostart file to launch our script when the desktop loads.
+
+1.  **Create/Edit Autostart File**:
+    ```bash
+    mkdir -p /home/pi/.config/lxsession/LXDE-pi
+    nano /home/pi/.config/lxsession/LXDE-pi/autostart
+    ```
+
+2.  **Add the following line**:
+    ```bash
+    @/home/pi/dibo-tracker/start-kiosk.sh
+    ```
+    *Note: If the file already has content, add this line to the end. If the file is empty, add `@lxpanel --profile LXDE-pi` and `@pcmanfm --desktop --profile LXDE-pi` before it if you want the desktop to load underneath (optional for kiosk).*
+
+3.  **Reboot**:
+    ```bash
+    sudo reboot
+    ```
+
+## Troubleshooting
+-   **Screen is upside down?**
+    Add `display_rotate=2` to `/boot/config.txt`.
+-   **Touch is inverted?**
+    You might need to calibrate the touchscreen using `xinput_calibrator` (install via `sudo apt install xinput-calibrator`).
+-   **App doesn't load?**
+    Check if the server is running by opening a terminal and running `curl http://localhost:3000`. If it fails, check the logs or try running `./start-kiosk.sh` manually to see errors.
+
+## Maintenance
+The app will now **automatically update** every time you reboot the Pi.
+1.  Push your changes to GitHub.
+2.  Reboot the Pi (`sudo reboot`).
+3.  The Pi will pull the latest code, rebuild, and launch the new version.
+
+If you need to update manually without rebooting:
+1.  SSH into the Pi.
+2.  `cd /home/pi/dibo-tracker`
+3.  `./start-kiosk.sh` (This will run the update logic)
