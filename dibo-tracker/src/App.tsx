@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { format } from "date-fns";
-import { Pencil, Settings, Trash2, X } from "lucide-react";
+import { ArrowRight, Pencil, Settings, Trash2, X } from "lucide-react";
 import {
   addDoc,
   collection,
@@ -55,21 +55,24 @@ function pronoun(gender: DogGender): string {
 }
 
 function statusFromFlags(peed?: boolean, pooped?: boolean): string {
-  return (peed ? "Pee" : "") + (peed && pooped ? ", " : "") + (pooped ? "Poop" : "") || "None";
+  return (peed ? "💦 Pee" : "") + (peed && pooped ? ", " : "") + (pooped ? "💩 Poop" : "") || "—";
 }
 
 function digitsToTime12(digits: string): { hours: number; minutes: number } | null {
-  if (digits.length !== 4) return null;
-  const hours = Number(digits.slice(0, 2));
-  const minutes = Number(digits.slice(2, 4));
+  if (digits.length === 0 || digits.length > 4) return null;
+  const normalized = digits.padStart(4, "0");
+  const hours = Number(normalized.slice(0, 2));
+  const minutes = Number(normalized.slice(2, 4));
   if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
   if (hours < 1 || hours > 12 || minutes < 0 || minutes > 59) return null;
   return { hours, minutes };
 }
 
 function formatDigitsAsTime(digits: string): string {
-  const hh = digits.slice(0, 2).padEnd(2, "_");
-  const mm = digits.slice(2, 4).padEnd(2, "_");
+  if (digits.length === 0) return "__:__";
+  const normalized = digits.padStart(4, "0");
+  const hh = normalized.slice(0, 2);
+  const mm = normalized.slice(2, 4);
   return `${hh}:${mm}`;
 }
 
@@ -87,12 +90,13 @@ function App() {
   const [walkTargetId, setWalkTargetId] = useState<string | null>(null);
   const [walkDigits, setWalkDigits] = useState(format(new Date(), "hhmm"));
   const [walkPeriod, setWalkPeriod] = useState<"AM" | "PM">(format(new Date(), "a") as "AM" | "PM");
+  const [walkTypingStarted, setWalkTypingStarted] = useState(false);
+  const [showTimeKeypad, setShowTimeKeypad] = useState(false);
   const [walkPee, setWalkPee] = useState(false);
   const [walkPoop, setWalkPoop] = useState(false);
 
   const [profile, setProfile] = useState<DogProfile>(DEFAULT_PROFILE);
   const [draftProfile, setDraftProfile] = useState<DogProfile>(DEFAULT_PROFILE);
-  const lyDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem("dogProfile");
@@ -169,53 +173,30 @@ function App() {
       unsubProfile();
     };
   }, []);
+  const setLyValue = (value: number) => {
+    const normalized = clampPercentage(value);
+    setLyMeter(normalized);
+    const firestore = db;
+    if (!isFirebaseConfigured || !firestore) return;
+    void setDoc(
+      doc(firestore, "state", "ly"),
+      { value: normalized, updatedAt: Timestamp.now() },
+      { merge: true }
+    );
+  };
+
 
   useEffect(() => {
     if (view === "settings") setDraftProfile(profile);
   }, [view, profile]);
-
-  const queueLySync = (value: number) => {
-    const firestore = db;
-    if (!isFirebaseConfigured || !firestore) return;
-    if (lyDebounceRef.current) clearTimeout(lyDebounceRef.current);
-    lyDebounceRef.current = setTimeout(() => {
-      void setDoc(doc(firestore, "state", "ly"), {
-        value,
-        updatedAt: Timestamp.now(),
-      });
-    }, 180);
-  };
-
-  const setLyValue = (value: number) => {
-    const normalized = clampPercentage(value);
-    setLyMeter(normalized);
-    queueLySync(normalized);
-  };
-
-  const addMealEvent = (type: "an_sang" | "an_chieu") => {
-    const time = new Date();
-    const todayMealLogs = events.filter((item) => item.type === type && isSameDay(item.time, time));
-    const firestore = db;
-
-    if (!isFirebaseConfigured || !firestore) {
-      setEvents((prev) => {
-        const withoutToday = prev.filter((item) => !(item.type === type && isSameDay(item.time, time)));
-        return [{ id: `${type}-${time.getTime()}`, type, time }, ...withoutToday];
-      });
-      return;
-    }
-
-    void (async () => {
-      await Promise.all(todayMealLogs.map((item) => deleteDoc(doc(firestore, "events", item.id))));
-      await addDoc(collection(firestore, "events"), { type, time: Timestamp.fromDate(time) });
-    })();
-  };
 
   const openWalkEntry = () => {
     setWalkMode("new");
     setWalkTargetId(null);
     setWalkDigits(format(new Date(), "hhmm"));
     setWalkPeriod(format(new Date(), "a") as "AM" | "PM");
+    setWalkTypingStarted(false);
+    setShowTimeKeypad(false);
     setWalkPee(false);
     setWalkPoop(false);
     setView("walk");
@@ -226,6 +207,8 @@ function App() {
     setWalkTargetId(item.id);
     setWalkDigits(format(item.time, "hhmm"));
     setWalkPeriod(format(item.time, "a") as "AM" | "PM");
+    setWalkTypingStarted(false);
+    setShowTimeKeypad(false);
     setWalkPee(Boolean(item.peed));
     setWalkPoop(Boolean(item.pooped));
     setView("walk");
@@ -283,6 +266,8 @@ function App() {
     setWalkTargetId(null);
     setWalkDigits(format(new Date(), "hhmm"));
     setWalkPeriod(format(new Date(), "a") as "AM" | "PM");
+    setWalkTypingStarted(false);
+    setShowTimeKeypad(false);
     setWalkPee(false);
     setWalkPoop(false);
     setView("dashboard");
@@ -317,23 +302,42 @@ function App() {
   };
 
   const appendWalkDigit = (digit: string) => {
-    setWalkDigits((prev) => (prev.length >= 4 ? prev : `${prev}${digit}`));
+    setWalkDigits((prev) => {
+      if (!walkTypingStarted) return digit;
+      return prev.length >= 4 ? prev : `${prev}${digit}`;
+    });
+    setWalkTypingStarted(true);
   };
 
   const backspaceWalkDigit = () => {
+    if (!walkTypingStarted) {
+      setWalkDigits("");
+      setWalkTypingStarted(true);
+      return;
+    }
     setWalkDigits((prev) => prev.slice(0, -1));
   };
 
-  const clearWalkDigits = () => setWalkDigits("");
+  const clearWalkDigits = () => {
+    setWalkDigits("");
+    setWalkTypingStarted(true);
+  };
   const nowWalkDigits = () => {
     setWalkDigits(format(new Date(), "hhmm"));
     setWalkPeriod(format(new Date(), "a") as "AM" | "PM");
+    setWalkTypingStarted(false);
+  };
+
+  const confirmTimeSelection = () => {
+    if (!digitsToTime12(walkDigits)) return;
+    setShowTimeKeypad(false);
   };
 
   const lastBreakfast = events.find((item) => item.type === "an_sang");
   const lastDinner = events.find((item) => item.type === "an_chieu");
   const lastWalk = events.find((item) => item.type === "di_bo");
   const todayWalks = events.filter((item) => item.type === "di_bo" && isSameDay(item.time, now));
+  const poopedToday = todayWalks.some((item) => item.pooped);
   const breakfastDoneToday = Boolean(lastBreakfast && isSameDay(lastBreakfast.time, now));
   const dinnerDoneToday = Boolean(lastDinner && isSameDay(lastDinner.time, now));
   const walkAgeHours = lastWalk ? (now.getTime() - lastWalk.time.getTime()) / (1000 * 60 * 60) : null;
@@ -345,30 +349,13 @@ function App() {
         : walkAgeHours < 8
           ? "border-amber-500/50 bg-amber-500/10 text-amber-200"
           : "border-rose-500/50 bg-rose-500/10 text-rose-200";
-  const breakfastClass = breakfastDoneToday
-    ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-100"
-    : "border-rose-500/50 bg-rose-500/10 text-rose-100";
-  const dinnerClass = dinnerDoneToday
-    ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-100"
-    : "border-rose-500/50 bg-rose-500/10 text-rose-100";
-  const hasPottyInfo = Boolean(lastWalk && (lastWalk.peed || lastWalk.pooped));
-  const pottyClass = hasPottyInfo
-    ? "border-cyan-500/50 bg-cyan-500/10 text-cyan-100"
-    : "border-slate-700 bg-slate-900 text-slate-100";
-  const lyClass =
-    lyMeter < 34
-      ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-100"
-      : lyMeter < 67
-        ? "border-amber-500/50 bg-amber-500/10 text-amber-100"
-        : "border-rose-500/50 bg-rose-500/10 text-rose-100";
-  const lyAccentClass = lyMeter < 34 ? "accent-emerald-500" : lyMeter < 67 ? "accent-amber-500" : "accent-rose-500";
   const profileChanged =
     draftProfile.name.trim() !== profile.name || draftProfile.gender !== profile.gender;
 
   if (view === "settings") {
     return (
       <div className="min-h-screen bg-slate-950 px-2 py-2 text-slate-100">
-        <div className="mx-auto w-full max-w-3xl p-1">
+        <div className="w-full p-1">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-base font-bold">Settings</h2>
             <button
@@ -441,7 +428,7 @@ function App() {
 
     return (
       <div className="min-h-screen bg-slate-950 px-2 py-2 text-slate-100">
-        <div className="mx-auto w-full max-w-3xl p-1">
+        <div className="w-full p-1">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-base font-bold">{walkMode === "edit" ? "Edit walk" : "New walk"}</h2>
             <button
@@ -453,71 +440,84 @@ function App() {
             </button>
           </div>
 
-          <div className="mb-2 rounded border border-slate-700 bg-slate-900 px-3 py-3 text-center text-6xl font-bold tabular-nums tracking-wider">
+          <button
+            onClick={() => setShowTimeKeypad(true)}
+            className="mb-2 w-full rounded-xl border border-cyan-500/40 bg-linear-to-br from-slate-900 to-slate-800 px-3 py-4 text-center text-6xl font-bold tabular-nums tracking-wider text-cyan-100 shadow-[0_6px_20px_rgba(6,182,212,0.16)]"
+          >
             {formatDigitsAsTime(walkDigits)} {walkPeriod}
-          </div>
+          </button>
 
-          <div className="mb-2 grid grid-cols-2 gap-1">
-            <button
-              onClick={() => setWalkPeriod("AM")}
-              className={`h-10 rounded border text-lg font-bold ${
-                walkPeriod === "AM"
-                  ? "border-cyan-500 bg-cyan-500 text-slate-950"
-                  : "border-slate-700 bg-slate-900 text-slate-300"
-              }`}
-            >
-              AM
-            </button>
-            <button
-              onClick={() => setWalkPeriod("PM")}
-              className={`h-10 rounded border text-lg font-bold ${
-                walkPeriod === "PM"
-                  ? "border-cyan-500 bg-cyan-500 text-slate-950"
-                  : "border-slate-700 bg-slate-900 text-slate-300"
-              }`}
-            >
-              PM
-            </button>
-          </div>
+          {showTimeKeypad ? (
+            <div className="mb-2 rounded-xl border border-slate-700 bg-slate-900/90 p-2 shadow-[0_8px_24px_rgba(2,6,23,0.45)]">
+              <div className="mb-2 grid grid-cols-2 gap-1">
+                <button
+                  onClick={() => setWalkPeriod("AM")}
+                  className={`h-11 rounded-lg border text-lg font-bold transition ${
+                    walkPeriod === "AM"
+                      ? "border-cyan-400 bg-cyan-400 text-slate-950"
+                      : "border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700"
+                  }`}
+                >
+                  AM
+                </button>
+                <button
+                  onClick={() => setWalkPeriod("PM")}
+                  className={`h-11 rounded-lg border text-lg font-bold transition ${
+                    walkPeriod === "PM"
+                      ? "border-cyan-400 bg-cyan-400 text-slate-950"
+                      : "border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700"
+                  }`}
+                >
+                  PM
+                </button>
+              </div>
 
-          <div className="grid grid-cols-3 gap-1">
-            {keypad.map((key) => (
-              <button
-                key={key}
-                onClick={() => appendWalkDigit(key)}
-                className="h-16 rounded border border-slate-700 bg-slate-900 text-3xl font-bold text-slate-100 transition hover:bg-slate-800"
-              >
-                {key}
-              </button>
-            ))}
-            <button
-              onClick={clearWalkDigits}
-              className="h-16 rounded border border-slate-700 bg-slate-900 text-lg font-semibold text-slate-300 transition hover:bg-slate-800"
-            >
-              Clear
-            </button>
-            <button
-              onClick={() => appendWalkDigit("0")}
-              className="h-16 rounded border border-slate-700 bg-slate-900 text-3xl font-bold text-slate-100 transition hover:bg-slate-800"
-            >
-              0
-            </button>
-            <button
-              onClick={backspaceWalkDigit}
-              className="h-16 rounded border border-slate-700 bg-slate-900 text-lg font-semibold text-slate-300 transition hover:bg-slate-800"
-            >
-              Back
-            </button>
-          </div>
+              <div className="grid grid-cols-3 gap-1">
+                {keypad.map((key) => (
+                  <button
+                    key={key}
+                    onClick={() => appendWalkDigit(key)}
+                    className="h-14 rounded-lg border border-slate-700 bg-slate-800 text-3xl font-bold text-slate-100 transition hover:bg-slate-700 active:scale-[0.99]"
+                  >
+                    {key}
+                  </button>
+                ))}
+                <button
+                  onClick={clearWalkDigits}
+                  className="h-14 rounded-lg border border-slate-700 bg-slate-800 text-base font-semibold text-slate-300 transition hover:bg-slate-700"
+                >
+                  Clear
+                </button>
+                <button
+                  onClick={() => appendWalkDigit("0")}
+                  className="h-14 rounded-lg border border-slate-700 bg-slate-800 text-3xl font-bold text-slate-100 transition hover:bg-slate-700 active:scale-[0.99]"
+                >
+                  0
+                </button>
+                <button
+                  onClick={backspaceWalkDigit}
+                  className="h-14 rounded-lg border border-slate-700 bg-slate-800 text-base font-semibold text-slate-300 transition hover:bg-slate-700"
+                >
+                  Back
+                </button>
+              </div>
 
-          <div className="mt-1">
-            <button
-              onClick={nowWalkDigits}
-              className="h-10 w-full rounded border border-slate-700 bg-slate-900 text-sm font-semibold text-slate-300 transition hover:bg-slate-800"
-            >
-              Use current time
-            </button>
-          </div>
+              <div className="mt-2 grid grid-cols-2 gap-1">
+                <button
+                  onClick={nowWalkDigits}
+                  className="h-10 rounded-lg border border-slate-700 bg-slate-800 text-sm font-semibold text-slate-300 transition hover:bg-slate-700"
+                >
+                  Current Time
+                </button>
+                <button
+                  onClick={confirmTimeSelection}
+                  className="h-10 rounded-lg border border-cyan-500 bg-cyan-500 text-sm font-bold text-slate-950 transition hover:bg-cyan-400"
+                >
+                  OK
+                </button>
+              </div>
+            </div>
+          ) : null}
 
           <div className="mt-2 grid grid-cols-2 gap-1">
             <button
@@ -528,7 +528,7 @@ function App() {
                   : "border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800"
               }`}
             >
-              Pee: {walkPee ? "Yes" : "No"}
+              💦 Pee: {walkPee ? "Yes" : "No"}
             </button>
             <button
               onClick={() => setWalkPoop((prev) => !prev)}
@@ -538,7 +538,7 @@ function App() {
                   : "border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800"
               }`}
             >
-              Poop: {walkPoop ? "Yes" : "No"}
+              💩 Poop: {walkPoop ? "Yes" : "No"}
             </button>
           </div>
 
@@ -556,7 +556,7 @@ function App() {
                 <thead className="sticky top-0 bg-slate-950 text-slate-400">
                   <tr>
                     <th className="border-b border-slate-700 px-1 py-2">Time</th>
-                    <th className="border-b border-slate-700 px-1 py-2">Pee/Poop</th>
+                    <th className="border-b border-slate-700 px-1 py-2">💦 / 💩</th>
                     <th className="border-b border-slate-700 px-1 py-2">Actions</th>
                   </tr>
                 </thead>
@@ -596,74 +596,82 @@ function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 px-2 py-2 text-slate-100">
-      <div className="relative mx-auto w-full max-w-3xl space-y-2 pt-1">
+      <div className="relative w-full min-h-[calc(100vh-1rem)] pt-1">
         <button
           onClick={() => setView("settings")}
-          className="absolute right-0 top-0 inline-flex h-8 w-8 items-center justify-center rounded border border-slate-700 bg-slate-900 text-slate-200 transition hover:bg-slate-800"
+          className="absolute right-0 top-0 z-10 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700 bg-slate-900/90 text-slate-200 shadow-[0_8px_20px_rgba(2,6,23,0.4)] transition hover:bg-slate-800"
           aria-label="Open settings"
         >
           <Settings size={14} />
         </button>
 
-        <section className="grid grid-cols-2 gap-2 pr-9">
-          <div className="rounded border border-cyan-500/40 bg-cyan-500/10 px-2 py-1">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Current time</div>
-            <div className="mt-1 text-6xl font-bold tabular-nums leading-none">{format(now, "hh:mm a")}</div>
-          </div>
-          <div className={`rounded px-2 py-1 ${walkStatusClass}`}>
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Last walk</div>
-            <div className="mt-1 text-6xl font-bold tabular-nums leading-none">
-              {lastWalk ? formatTime12(lastWalk.time) : "--:-- --"}
+        <section className="flex min-h-[calc(100vh-2.25rem)] gap-2">
+          <div className="flex w-[90%] flex-col justify-between rounded-2xl border border-slate-800 bg-linear-to-b from-slate-900 via-slate-900 to-slate-950 px-4 py-4 shadow-[0_22px_50px_rgba(2,6,23,0.55)]">
+            <div>
+              <div className="mb-1 text-xl font-bold uppercase tracking-[0.08em] text-slate-300">Current time ⏰</div>
+              <div className="mb-2 text-[clamp(4.2rem,14vw,10rem)] font-black tabular-nums leading-[0.92] text-cyan-200">
+                {format(now, "hh:mm a")}
+              </div>
+
+              <div className="text-xl font-bold uppercase tracking-[0.08em] text-slate-300">Last walk 🐾</div>
+              <div className={`mt-1 inline-block rounded-xl border px-3 py-2 text-[clamp(4.8rem,16vw,12rem)] font-black tabular-nums leading-[0.9] ${walkStatusClass}`}>
+                {lastWalk ? formatTime12(lastWalk.time) : "--:-- --"}
+              </div>
+            </div>
+
+            <div className="border-t border-slate-800 pt-3">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <div className={`rounded-xl border px-3 py-3 ${poopedToday ? "border-emerald-500/50 bg-emerald-500/10" : "border-rose-500/50 bg-rose-500/10"}`}>
+                  <div className="text-base font-semibold text-slate-300">Pooped today? 💩</div>
+                  <div className={`text-5xl font-black leading-none ${poopedToday ? "text-emerald-300" : "text-rose-300"}`}>
+                    {poopedToday ? "✅ YES 💩" : "❌ NO 💩"}
+                  </div>
+                </div>
+                <div className={`rounded-xl border px-3 py-3 ${breakfastDoneToday ? "border-emerald-500/50 bg-emerald-500/10" : "border-rose-500/50 bg-rose-500/10"}`}>
+                  <div className="text-base font-semibold text-slate-300">Breakfast 🍳</div>
+                  <div className={`text-5xl font-black leading-none ${breakfastDoneToday ? "text-emerald-300" : "text-rose-300"}`}>
+                    {breakfastDoneToday ? "✅ YES 🍳" : "❌ NO 🍳"}
+                  </div>
+                </div>
+                <div className={`rounded-xl border px-3 py-3 ${dinnerDoneToday ? "border-emerald-500/50 bg-emerald-500/10" : "border-rose-500/50 bg-rose-500/10"}`}>
+                  <div className="text-base font-semibold text-slate-300">Dinner 🍽️</div>
+                  <div className={`text-5xl font-black leading-none ${dinnerDoneToday ? "text-emerald-300" : "text-rose-300"}`}>
+                    {dinnerDoneToday ? "✅ YES 🍽️" : "❌ NO 🍽️"}
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={openWalkEntry}
+                className="mt-3 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-cyan-500 bg-cyan-500 text-xl font-bold text-slate-950 transition hover:bg-cyan-400"
+              >
+                Open details
+                <ArrowRight size={20} />
+              </button>
             </div>
           </div>
-        </section>
 
-        <section className="grid grid-cols-2 gap-2">
-          <button
-            onClick={() => addMealEvent("an_sang")}
-            className={`h-20 rounded px-2 text-left transition ${breakfastClass}`}
-          >
-            <div className="text-sm font-semibold">Breakfast?</div>
-            <div className="text-4xl font-bold tabular-nums">{lastBreakfast ? formatTime12(lastBreakfast.time) : "--:-- --"}</div>
-          </button>
-          <button
-            onClick={() => addMealEvent("an_chieu")}
-            className={`h-20 rounded px-2 text-left transition ${dinnerClass}`}
-          >
-            <div className="text-sm font-semibold">Dinner?</div>
-            <div className="text-4xl font-bold tabular-nums">{lastDinner ? formatTime12(lastDinner.time) : "--:-- --"}</div>
-          </button>
-        </section>
-
-        <section className="grid grid-cols-2 gap-2">
-          <div className={`h-20 rounded px-2 py-2 ${pottyClass}`}>
-            <div className="text-sm font-semibold">Pee / Poop (last walk)</div>
-            <div className="mt-1 text-4xl font-bold leading-none">{statusFromFlags(lastWalk?.peed, lastWalk?.pooped)}</div>
-          </div>
-          <div className={`h-20 rounded px-2 py-2 ${lyClass}`}>
-            <div className="mb-1 flex items-center justify-between text-sm font-semibold">
-              <span>Ly</span>
-              <span>{lyMeter}%</span>
+          <aside className="flex w-[10%] min-w-16 flex-col rounded-2xl border border-slate-800 bg-slate-900/95 px-1.5 py-3 shadow-[0_14px_34px_rgba(2,6,23,0.5)]">
+            <div className="text-center text-lg font-black text-rose-300">Lỳ</div>
+            <div className="relative my-2 flex-1 rounded-full border border-slate-700 bg-linear-to-b from-rose-500 via-amber-400 to-emerald-500">
+              <div
+                className="absolute left-1/2 h-3 w-[120%] -translate-x-1/2 rounded-full border border-white/70 bg-slate-100 shadow-[0_0_12px_rgba(255,255,255,0.5)]"
+                style={{ top: `calc(${lyMeter}% - 0.375rem)` }}
+              />
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={lyMeter}
+                onChange={(e) => setLyValue(Number(e.target.value))}
+                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                aria-label="Ly meter"
+              />
             </div>
-            <input
-              type="range"
-              min={0}
-              max={100}
-              step={1}
-              value={lyMeter}
-              onChange={(e) => setLyValue(Number(e.target.value))}
-              className={`h-9 w-full cursor-pointer ${lyAccentClass}`}
-              aria-label="Ly meter"
-            />
-          </div>
+            <div className="text-center text-lg font-black text-emerald-300">Ngoan</div>
+            <div className="mt-1 text-center text-xl font-black tabular-nums text-slate-200">{lyMeter}%</div>
+          </aside>
         </section>
-
-        <button
-          onClick={openWalkEntry}
-          className="h-14 w-full rounded border border-cyan-500 bg-cyan-500 text-2xl font-bold text-slate-950 transition hover:bg-cyan-400"
-        >
-          WALK DETAILS
-        </button>
       </div>
     </div>
   );
