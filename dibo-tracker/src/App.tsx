@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { format } from "date-fns";
-import { Check, Pencil, Settings, Trash2, X } from "lucide-react";
+import { Pencil, Settings, Trash2, X } from "lucide-react";
 import {
   addDoc,
   collection,
@@ -18,6 +18,7 @@ import { db, isFirebaseConfigured } from "./lib/firebase";
 type EventType = "an_sang" | "di_bo" | "an_chieu";
 type DogGender = "male" | "female";
 type View = "dashboard" | "settings" | "walk";
+type WalkMode = "new" | "edit";
 
 type EventItem = {
   id: string;
@@ -53,16 +54,42 @@ function pronoun(gender: DogGender): string {
   return gender === "female" ? "she" : "he";
 }
 
+function statusFromFlags(peed?: boolean, pooped?: boolean): string {
+  return (peed ? "Pee" : "") + (peed && pooped ? ", " : "") + (pooped ? "Poop" : "") || "None";
+}
+
+function digitsToTime12(digits: string): { hours: number; minutes: number } | null {
+  if (digits.length !== 4) return null;
+  const hours = Number(digits.slice(0, 2));
+  const minutes = Number(digits.slice(2, 4));
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
+  if (hours < 1 || hours > 12 || minutes < 0 || minutes > 59) return null;
+  return { hours, minutes };
+}
+
+function formatDigitsAsTime(digits: string): string {
+  const hh = digits.slice(0, 2).padEnd(2, "_");
+  const mm = digits.slice(2, 4).padEnd(2, "_");
+  return `${hh}:${mm}`;
+}
+
+function formatTime12(time: Date): string {
+  return format(time, "hh:mm a");
+}
+
 function App() {
   const [now, setNow] = useState(new Date());
   const [view, setView] = useState<View>("dashboard");
   const [events, setEvents] = useState<EventItem[]>([]);
   const [lyMeter, setLyMeter] = useState(20);
-  const [walkTimeInput, setWalkTimeInput] = useState(format(new Date(), "HH:mm"));
+
+  const [walkMode, setWalkMode] = useState<WalkMode>("new");
+  const [walkTargetId, setWalkTargetId] = useState<string | null>(null);
+  const [walkDigits, setWalkDigits] = useState(format(new Date(), "hhmm"));
+  const [walkPeriod, setWalkPeriod] = useState<"AM" | "PM">(format(new Date(), "a") as "AM" | "PM");
   const [walkPee, setWalkPee] = useState(false);
   const [walkPoop, setWalkPoop] = useState(false);
-  const [editingWalkId, setEditingWalkId] = useState<string | null>(null);
-  const [editingWalkTime, setEditingWalkTime] = useState("");
+
   const [profile, setProfile] = useState<DogProfile>(DEFAULT_PROFILE);
   const [draftProfile, setDraftProfile] = useState<DogProfile>(DEFAULT_PROFILE);
   const lyDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -184,85 +211,84 @@ function App() {
     })();
   };
 
-  const saveWalk = () => {
-    const [hourText, minuteText] = walkTimeInput.split(":");
-    const h = Number(hourText);
-    const m = Number(minuteText);
-    const time = new Date();
-    if (!Number.isNaN(h) && !Number.isNaN(m) && h >= 0 && h <= 23 && m >= 0 && m <= 59) {
-      time.setHours(h, m, 0, 0);
-    }
-
-    const newWalk: EventItem = {
-      id: `di_bo-${time.getTime()}`,
-      type: "di_bo",
-      time,
-      peed: walkPee,
-      pooped: walkPoop,
-    };
-
-    const firestore = db;
-    if (!isFirebaseConfigured || !firestore) {
-      setEvents((prev) => [newWalk, ...prev].sort((a, b) => b.time.getTime() - a.time.getTime()));
-    } else {
-      void addDoc(collection(firestore, "events"), {
-        type: "di_bo",
-        time: Timestamp.fromDate(time),
-        peed: walkPee,
-        pooped: walkPoop,
-      });
-    }
-    setWalkTimeInput(format(new Date(), "HH:mm"));
-    setWalkPee(false);
-    setWalkPoop(false);
-    setView("dashboard");
-  };
-
   const openWalkEntry = () => {
-    setWalkTimeInput(format(new Date(), "HH:mm"));
+    setWalkMode("new");
+    setWalkTargetId(null);
+    setWalkDigits(format(new Date(), "hhmm"));
+    setWalkPeriod(format(new Date(), "a") as "AM" | "PM");
     setWalkPee(false);
     setWalkPoop(false);
     setView("walk");
   };
 
-  const startEditWalk = (item: EventItem) => {
-    setEditingWalkId(item.id);
-    setEditingWalkTime(format(item.time, "HH:mm"));
+  const openEditWalk = (item: EventItem) => {
+    setWalkMode("edit");
+    setWalkTargetId(item.id);
+    setWalkDigits(format(item.time, "hhmm"));
+    setWalkPeriod(format(item.time, "a") as "AM" | "PM");
+    setWalkPee(Boolean(item.peed));
+    setWalkPoop(Boolean(item.pooped));
+    setView("walk");
   };
 
-  const cancelEditWalk = () => {
-    setEditingWalkId(null);
-    setEditingWalkTime("");
-  };
+  const saveWalk = () => {
+    const parsedTime = digitsToTime12(walkDigits);
+    if (!parsedTime) return;
 
-  const saveEditedWalk = (id: string) => {
-    const target = events.find((item) => item.id === id && item.type === "di_bo");
-    if (!target) return;
-    const [hText, mText] = editingWalkTime.split(":");
-    const h = Number(hText);
-    const m = Number(mText);
-    if (Number.isNaN(h) || Number.isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) return;
-
-    const nextTime = new Date(target.time);
-    nextTime.setHours(h, m, 0, 0);
+    const target = walkTargetId ? events.find((item) => item.id === walkTargetId) : undefined;
+    const time = new Date(target?.time ?? new Date());
+    let hours24 = parsedTime.hours % 12;
+    if (walkPeriod === "PM") hours24 += 12;
+    time.setHours(hours24, parsedTime.minutes, 0, 0);
 
     const firestore = db;
-    if (!isFirebaseConfigured || !firestore) {
-      setEvents((prev) =>
-        [...prev.map((item) => (item.id === id ? { ...item, time: nextTime } : item))].sort(
-          (a, b) => b.time.getTime() - a.time.getTime()
-        )
-      );
-      cancelEditWalk();
-      return;
+
+    if (walkMode === "edit" && walkTargetId) {
+      if (!isFirebaseConfigured || !firestore) {
+        setEvents((prev) =>
+          [...prev.map((item) =>
+            item.id === walkTargetId
+              ? { ...item, time, peed: walkPee, pooped: walkPoop }
+              : item
+          )].sort((a, b) => b.time.getTime() - a.time.getTime())
+        );
+      } else {
+        void updateDoc(doc(firestore, "events", walkTargetId), {
+          time: Timestamp.fromDate(time),
+          peed: walkPee,
+          pooped: walkPoop,
+        });
+      }
+    } else {
+      const newWalk: EventItem = {
+        id: `di_bo-${time.getTime()}`,
+        type: "di_bo",
+        time,
+        peed: walkPee,
+        pooped: walkPoop,
+      };
+      if (!isFirebaseConfigured || !firestore) {
+        setEvents((prev) => [newWalk, ...prev].sort((a, b) => b.time.getTime() - a.time.getTime()));
+      } else {
+        void addDoc(collection(firestore, "events"), {
+          type: "di_bo",
+          time: Timestamp.fromDate(time),
+          peed: walkPee,
+          pooped: walkPoop,
+        });
+      }
     }
-    void updateDoc(doc(firestore, "events", id), { time: Timestamp.fromDate(nextTime) }).finally(() => {
-      cancelEditWalk();
-    });
+
+    setWalkMode("new");
+    setWalkTargetId(null);
+    setWalkDigits(format(new Date(), "hhmm"));
+    setWalkPeriod(format(new Date(), "a") as "AM" | "PM");
+    setWalkPee(false);
+    setWalkPoop(false);
+    setView("dashboard");
   };
 
   const removeEvent = (id: string) => {
-    if (editingWalkId === id) cancelEditWalk();
     const firestore = db;
     if (!isFirebaseConfigured || !firestore) {
       setEvents((prev) => prev.filter((item) => item.id !== id));
@@ -290,9 +316,52 @@ function App() {
     ).finally(() => setView("dashboard"));
   };
 
+  const appendWalkDigit = (digit: string) => {
+    setWalkDigits((prev) => (prev.length >= 4 ? prev : `${prev}${digit}`));
+  };
+
+  const backspaceWalkDigit = () => {
+    setWalkDigits((prev) => prev.slice(0, -1));
+  };
+
+  const clearWalkDigits = () => setWalkDigits("");
+  const nowWalkDigits = () => {
+    setWalkDigits(format(new Date(), "hhmm"));
+    setWalkPeriod(format(new Date(), "a") as "AM" | "PM");
+  };
+
   const lastBreakfast = events.find((item) => item.type === "an_sang");
   const lastDinner = events.find((item) => item.type === "an_chieu");
+  const lastWalk = events.find((item) => item.type === "di_bo");
   const todayWalks = events.filter((item) => item.type === "di_bo" && isSameDay(item.time, now));
+  const breakfastDoneToday = Boolean(lastBreakfast && isSameDay(lastBreakfast.time, now));
+  const dinnerDoneToday = Boolean(lastDinner && isSameDay(lastDinner.time, now));
+  const walkAgeHours = lastWalk ? (now.getTime() - lastWalk.time.getTime()) / (1000 * 60 * 60) : null;
+  const walkStatusClass =
+    walkAgeHours === null
+      ? "border-rose-500/50 bg-rose-500/10 text-rose-200"
+      : walkAgeHours < 4
+        ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-200"
+        : walkAgeHours < 8
+          ? "border-amber-500/50 bg-amber-500/10 text-amber-200"
+          : "border-rose-500/50 bg-rose-500/10 text-rose-200";
+  const breakfastClass = breakfastDoneToday
+    ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-100"
+    : "border-rose-500/50 bg-rose-500/10 text-rose-100";
+  const dinnerClass = dinnerDoneToday
+    ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-100"
+    : "border-rose-500/50 bg-rose-500/10 text-rose-100";
+  const hasPottyInfo = Boolean(lastWalk && (lastWalk.peed || lastWalk.pooped));
+  const pottyClass = hasPottyInfo
+    ? "border-cyan-500/50 bg-cyan-500/10 text-cyan-100"
+    : "border-slate-700 bg-slate-900 text-slate-100";
+  const lyClass =
+    lyMeter < 34
+      ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-100"
+      : lyMeter < 67
+        ? "border-amber-500/50 bg-amber-500/10 text-amber-100"
+        : "border-rose-500/50 bg-rose-500/10 text-rose-100";
+  const lyAccentClass = lyMeter < 34 ? "accent-emerald-500" : lyMeter < 67 ? "accent-amber-500" : "accent-rose-500";
   const profileChanged =
     draftProfile.name.trim() !== profile.name || draftProfile.gender !== profile.gender;
 
@@ -368,11 +437,13 @@ function App() {
   }
 
   if (view === "walk") {
+    const keypad = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
+
     return (
       <div className="min-h-screen bg-slate-950 px-2 py-2 text-slate-100">
         <div className="mx-auto w-full max-w-3xl p-1">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-base font-bold">Walk details</h2>
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-base font-bold">{walkMode === "edit" ? "Edit walk" : "New walk"}</h2>
             <button
               onClick={() => setView("dashboard")}
               className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-700 bg-slate-800 text-slate-200 transition hover:bg-slate-700"
@@ -382,47 +453,141 @@ function App() {
             </button>
           </div>
 
-          <div className="space-y-2">
-            <label className="block">
-              <div className="mb-1 text-sm font-semibold text-slate-200">Walk time</div>
-              <input
-                type="time"
-                value={walkTimeInput}
-                onChange={(e) => setWalkTimeInput(e.target.value)}
-                className="h-11 w-full rounded border border-slate-700 bg-slate-950 px-2 text-base text-slate-100 outline-none ring-cyan-500 transition focus:ring-2"
-                aria-label="Walk time"
-              />
-            </label>
+          <div className="mb-2 rounded border border-slate-700 bg-slate-900 px-3 py-3 text-center text-6xl font-bold tabular-nums tracking-wider">
+            {formatDigitsAsTime(walkDigits)} {walkPeriod}
+          </div>
 
-            <div className="grid grid-cols-2 gap-1">
-              <button
-                onClick={() => setWalkPee((prev) => !prev)}
-                className={`h-11 rounded border px-2 text-sm font-semibold transition ${
-                  walkPee
-                    ? "border-emerald-500 bg-emerald-500/20 text-emerald-300"
-                    : "border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800"
-                }`}
-              >
-                Pee: {walkPee ? "Yes" : "No"}
-              </button>
-              <button
-                onClick={() => setWalkPoop((prev) => !prev)}
-                className={`h-11 rounded border px-2 text-sm font-semibold transition ${
-                  walkPoop
-                    ? "border-emerald-500 bg-emerald-500/20 text-emerald-300"
-                    : "border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800"
-                }`}
-              >
-                Poop: {walkPoop ? "Yes" : "No"}
-              </button>
-            </div>
-
+          <div className="mb-2 grid grid-cols-2 gap-1">
             <button
-              onClick={saveWalk}
-              className="h-11 w-full rounded border border-cyan-500 bg-cyan-500 px-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
+              onClick={() => setWalkPeriod("AM")}
+              className={`h-10 rounded border text-lg font-bold ${
+                walkPeriod === "AM"
+                  ? "border-cyan-500 bg-cyan-500 text-slate-950"
+                  : "border-slate-700 bg-slate-900 text-slate-300"
+              }`}
             >
-              Save walk
+              AM
             </button>
+            <button
+              onClick={() => setWalkPeriod("PM")}
+              className={`h-10 rounded border text-lg font-bold ${
+                walkPeriod === "PM"
+                  ? "border-cyan-500 bg-cyan-500 text-slate-950"
+                  : "border-slate-700 bg-slate-900 text-slate-300"
+              }`}
+            >
+              PM
+            </button>
+          </div>
+
+          <div className="grid grid-cols-3 gap-1">
+            {keypad.map((key) => (
+              <button
+                key={key}
+                onClick={() => appendWalkDigit(key)}
+                className="h-16 rounded border border-slate-700 bg-slate-900 text-3xl font-bold text-slate-100 transition hover:bg-slate-800"
+              >
+                {key}
+              </button>
+            ))}
+            <button
+              onClick={clearWalkDigits}
+              className="h-16 rounded border border-slate-700 bg-slate-900 text-lg font-semibold text-slate-300 transition hover:bg-slate-800"
+            >
+              Clear
+            </button>
+            <button
+              onClick={() => appendWalkDigit("0")}
+              className="h-16 rounded border border-slate-700 bg-slate-900 text-3xl font-bold text-slate-100 transition hover:bg-slate-800"
+            >
+              0
+            </button>
+            <button
+              onClick={backspaceWalkDigit}
+              className="h-16 rounded border border-slate-700 bg-slate-900 text-lg font-semibold text-slate-300 transition hover:bg-slate-800"
+            >
+              Back
+            </button>
+          </div>
+
+          <div className="mt-1">
+            <button
+              onClick={nowWalkDigits}
+              className="h-10 w-full rounded border border-slate-700 bg-slate-900 text-sm font-semibold text-slate-300 transition hover:bg-slate-800"
+            >
+              Use current time
+            </button>
+          </div>
+
+          <div className="mt-2 grid grid-cols-2 gap-1">
+            <button
+              onClick={() => setWalkPee((prev) => !prev)}
+              className={`h-12 rounded border px-2 text-lg font-bold transition ${
+                walkPee
+                  ? "border-emerald-500 bg-emerald-500/20 text-emerald-300"
+                  : "border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800"
+              }`}
+            >
+              Pee: {walkPee ? "Yes" : "No"}
+            </button>
+            <button
+              onClick={() => setWalkPoop((prev) => !prev)}
+              className={`h-12 rounded border px-2 text-lg font-bold transition ${
+                walkPoop
+                  ? "border-emerald-500 bg-emerald-500/20 text-emerald-300"
+                  : "border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800"
+              }`}
+            >
+              Poop: {walkPoop ? "Yes" : "No"}
+            </button>
+          </div>
+
+          <button
+            onClick={saveWalk}
+            className="mt-2 h-12 w-full rounded border border-cyan-500 bg-cyan-500 px-3 text-lg font-bold text-slate-950 transition hover:bg-cyan-400"
+          >
+            {walkMode === "edit" ? "Save changes" : "Save walk"}
+          </button>
+
+          <div className="mt-3 border-t border-slate-800 pt-2">
+            <div className="mb-1 text-sm font-semibold text-slate-300">Today walks</div>
+            <div className="max-h-60 overflow-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="sticky top-0 bg-slate-950 text-slate-400">
+                  <tr>
+                    <th className="border-b border-slate-700 px-1 py-2">Time</th>
+                    <th className="border-b border-slate-700 px-1 py-2">Pee/Poop</th>
+                    <th className="border-b border-slate-700 px-1 py-2">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {todayWalks.map((item) => (
+                    <tr key={item.id} className="border-b border-slate-800">
+                      <td className="px-1 py-2 font-semibold tabular-nums">{formatTime12(item.time)}</td>
+                      <td className="px-1 py-2">{statusFromFlags(item.peed, item.pooped)}</td>
+                      <td className="px-1 py-2">
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => openEditWalk(item)}
+                            className="inline-flex h-8 items-center gap-1 rounded border border-cyan-500/40 bg-cyan-500/15 px-2 text-xs font-semibold text-cyan-300"
+                          >
+                            <Pencil size={12} />
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => removeEvent(item.id)}
+                            className="inline-flex h-8 items-center gap-1 rounded border border-rose-500/40 bg-rose-500/15 px-2 text-xs font-semibold text-rose-300"
+                          >
+                            <Trash2 size={12} />
+                            Del
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>
@@ -440,151 +605,65 @@ function App() {
           <Settings size={14} />
         </button>
 
-        <section className="grid grid-cols-2 gap-1 pr-9">
-          <article className="px-1 py-1">
+        <section className="grid grid-cols-2 gap-2 pr-9">
+          <div className="rounded border border-cyan-500/40 bg-cyan-500/10 px-2 py-1">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Current time</div>
-            <div className="mt-1 text-3xl font-bold tabular-nums leading-none">{format(now, "HH:mm:ss")}</div>
-          </article>
-
-          <article className="px-1 py-1">
-            <div className="mb-1 flex items-center justify-between">
-              <div className="text-xs font-semibold uppercase tracking-wide text-fuchsia-200">Ly meter</div>
-              <div className="rounded bg-fuchsia-500/20 px-1.5 py-0.5 text-sm font-bold text-fuchsia-100">
-                {lyMeter}%
-              </div>
+            <div className="mt-1 text-6xl font-bold tabular-nums leading-none">{format(now, "hh:mm a")}</div>
+          </div>
+          <div className={`rounded px-2 py-1 ${walkStatusClass}`}>
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Last walk</div>
+            <div className="mt-1 text-6xl font-bold tabular-nums leading-none">
+              {lastWalk ? formatTime12(lastWalk.time) : "--:-- --"}
             </div>
-            <div className="relative h-9">
-              <div className="absolute inset-x-0 top-1/2 h-3 -translate-y-1/2 rounded-full bg-linear-to-r from-emerald-400 via-amber-400 to-rose-500 opacity-90" />
-              <input
-                type="range"
-                min={0}
-                max={100}
-                step={1}
-                value={lyMeter}
-                onChange={(e) => setLyValue(Number(e.target.value))}
-                className="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent [&::-webkit-slider-runnable-track]:h-3 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:mt-[-7px] [&::-webkit-slider-thumb]:h-7 [&::-webkit-slider-thumb]:w-7 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white/70 [&::-webkit-slider-thumb]:bg-fuchsia-500 [&::-webkit-slider-thumb]:shadow-[0_0_0_3px_rgba(217,70,239,0.3)] [&::-moz-range-track]:h-3 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-transparent [&::-moz-range-thumb]:h-7 [&::-moz-range-thumb]:w-7 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white/70 [&::-moz-range-thumb]:bg-fuchsia-500"
-                aria-label="Ly meter"
-              />
+          </div>
+        </section>
+
+        <section className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => addMealEvent("an_sang")}
+            className={`h-20 rounded px-2 text-left transition ${breakfastClass}`}
+          >
+            <div className="text-sm font-semibold">Breakfast?</div>
+            <div className="text-4xl font-bold tabular-nums">{lastBreakfast ? formatTime12(lastBreakfast.time) : "--:-- --"}</div>
+          </button>
+          <button
+            onClick={() => addMealEvent("an_chieu")}
+            className={`h-20 rounded px-2 text-left transition ${dinnerClass}`}
+          >
+            <div className="text-sm font-semibold">Dinner?</div>
+            <div className="text-4xl font-bold tabular-nums">{lastDinner ? formatTime12(lastDinner.time) : "--:-- --"}</div>
+          </button>
+        </section>
+
+        <section className="grid grid-cols-2 gap-2">
+          <div className={`h-20 rounded px-2 py-2 ${pottyClass}`}>
+            <div className="text-sm font-semibold">Pee / Poop (last walk)</div>
+            <div className="mt-1 text-4xl font-bold leading-none">{statusFromFlags(lastWalk?.peed, lastWalk?.pooped)}</div>
+          </div>
+          <div className={`h-20 rounded px-2 py-2 ${lyClass}`}>
+            <div className="mb-1 flex items-center justify-between text-sm font-semibold">
+              <span>Ly</span>
+              <span>{lyMeter}%</span>
             </div>
-          </article>
-        </section>
-
-        <section className="border-t border-slate-800 pt-2">
-          <h2 className="text-base font-bold">{profile.name}'s meals</h2>
-          <div className="mt-2 grid grid-cols-2 gap-1">
-            <button
-              onClick={() => addMealEvent("an_sang")}
-              className="h-12 rounded border border-slate-700 bg-slate-800 px-2 text-sm font-semibold text-slate-100 transition hover:bg-slate-700"
-            >
-              <div>Breakfast</div>
-              <div className="mt-0.5 text-base tabular-nums">{lastBreakfast ? format(lastBreakfast.time, "HH:mm") : "--"}</div>
-            </button>
-            <button
-              onClick={() => addMealEvent("an_chieu")}
-              className="h-12 rounded border border-slate-700 bg-slate-800 px-2 text-sm font-semibold text-slate-100 transition hover:bg-slate-700"
-            >
-              <div>Dinner</div>
-              <div className="mt-0.5 text-base tabular-nums">{lastDinner ? format(lastDinner.time, "HH:mm") : "--"}</div>
-            </button>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={1}
+              value={lyMeter}
+              onChange={(e) => setLyValue(Number(e.target.value))}
+              className={`h-9 w-full cursor-pointer ${lyAccentClass}`}
+              aria-label="Ly meter"
+            />
           </div>
         </section>
 
-        <section className="border-t border-slate-800 pt-2">
-          <h2 className="text-base font-bold">{profile.name}'s walks</h2>
-          <div className="mt-2">
-            <button
-              onClick={openWalkEntry}
-              className="h-11 w-full rounded border border-cyan-500 bg-cyan-500 px-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
-            >
-              Add walk details
-            </button>
-          </div>
-
-          <div className="mt-2 max-h-88 overflow-auto">
-            <table className="w-full text-left text-base">
-              <thead className="sticky top-0 bg-slate-950 text-slate-300">
-                <tr>
-                  <th className="border-b border-slate-700 px-2 py-3 text-lg font-bold">Time</th>
-                  <th className="border-b border-slate-700 px-2 py-3 text-lg font-bold">Pee / Poop</th>
-                  <th className="border-b border-slate-700 px-2 py-3 text-base font-semibold">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {todayWalks.length === 0 ? (
-                  <tr>
-                    <td className="px-2 py-4 text-base text-slate-400" colSpan={3}>
-                      No walks logged today.
-                    </td>
-                  </tr>
-                ) : (
-                  todayWalks.map((item) => (
-                    <tr key={item.id} className="border-b border-slate-800">
-                      <td className="px-2 py-3 text-3xl font-bold tabular-nums leading-none">
-                        {editingWalkId === item.id ? (
-                          <input
-                            type="time"
-                            value={editingWalkTime}
-                            onChange={(e) => setEditingWalkTime(e.target.value)}
-                            className="h-12 w-40 rounded border border-slate-700 bg-slate-950 px-2 text-2xl font-semibold outline-none ring-cyan-500 transition focus:ring-2"
-                            aria-label="Edit walk time"
-                          />
-                        ) : (
-                          <div>{format(item.time, "HH:mm")}</div>
-                        )}
-                      </td>
-                      <td className="px-2 py-3 text-2xl font-semibold leading-none text-slate-200">
-                        {(item.peed ? "Pee" : "") +
-                          (item.peed && item.pooped ? ", " : "") +
-                          (item.pooped ? "Poop" : "") || "None"}
-                      </td>
-                      <td className="px-2 py-3">
-                        <div className="flex flex-wrap gap-1">
-                          {editingWalkId === item.id ? (
-                            <>
-                              <button
-                                onClick={() => saveEditedWalk(item.id)}
-                                className="inline-flex h-9 items-center gap-1 rounded border border-emerald-500/40 bg-emerald-500/15 px-2 text-sm font-semibold text-emerald-300"
-                                aria-label="Save walk time"
-                              >
-                                <Check size={14} />
-                                Save
-                              </button>
-                              <button
-                                onClick={cancelEditWalk}
-                                className="inline-flex h-9 items-center gap-1 rounded border border-slate-700 bg-slate-800 px-2 text-sm font-semibold text-slate-200"
-                                aria-label="Cancel walk edit"
-                              >
-                                <X size={14} />
-                                Cancel
-                              </button>
-                            </>
-                          ) : (
-                            <button
-                              onClick={() => startEditWalk(item)}
-                              className="inline-flex h-9 items-center gap-1 rounded border border-cyan-500/40 bg-cyan-500/15 px-2 text-sm font-semibold text-cyan-300"
-                              aria-label="Edit walk"
-                            >
-                              <Pencil size={14} />
-                              Edit
-                            </button>
-                          )}
-                          <button
-                            onClick={() => removeEvent(item.id)}
-                            className="inline-flex h-9 items-center gap-1 rounded border border-rose-500/40 bg-rose-500/15 px-2 text-sm font-semibold text-rose-300"
-                            aria-label="Delete walk"
-                          >
-                            <Trash2 size={14} />
-                            Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
+        <button
+          onClick={openWalkEntry}
+          className="h-14 w-full rounded border border-cyan-500 bg-cyan-500 text-2xl font-bold text-slate-950 transition hover:bg-cyan-400"
+        >
+          WALK DETAILS
+        </button>
       </div>
     </div>
   );
