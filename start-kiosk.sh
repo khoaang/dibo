@@ -6,18 +6,22 @@ sleep 10
 # Export display for X11
 export DISPLAY=:0
 
-# Navigate to project directory
-cd /home/pi/dibo-tracker
+# Navigate to project directory (where this script is located)
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$PROJECT_DIR"
+
+# Ensure we are on the main branch
+git checkout main
 
 # Check for updates
 echo "Checking for updates..."
-git fetch
+git fetch origin main
 LOCAL=$(git rev-parse HEAD)
-REMOTE=$(git rev-parse @{u})
+REMOTE=$(git rev-parse origin/main)
 
 if [ $LOCAL != $REMOTE ]; then
     echo "Update found! Pulling changes..."
-    git pull
+    git pull origin main
     echo "Rebuilding app..."
     npm install
     npm run build
@@ -42,8 +46,4 @@ xset -dpms
 unclutter -idle 0.1 -root &
 
 # Launch Chromium in Kiosk Mode
-# --kiosk: Full screen, no bars
-# --noerrdialogs: Suppress error dialogs
-# --disable-infobars: Remove "Chrome is being controlled..."
-# --check-for-update-interval=31536000: Don't check for updates
 chromium-browser --noerrdialogs --disable-infobars --kiosk http://localhost:3000 --check-for-update-interval=31536000

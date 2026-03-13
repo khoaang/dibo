@@ -73,57 +73,34 @@ If the screen resolution looks wrong (black bars or fuzzy), you need to edit `/b
 
 ## 5. Deploy the App
 
-1.  **Transfer the Project**:
-    You can use `scp` to copy the files from your computer to the Pi.
+1.  **Install Git (if needed)**:
+    Most Pi images have it, but just in case:
     ```bash
-    # Run this on your computer (not the Pi)
-    # Replace 'pi' with your username and 'dibo-pi' with your hostname/IP
-    scp -r dibo-tracker pi@dibo-pi:/home/pi/
+    sudo apt install -y git
     ```
 
-2.  **Install Dependencies & Build**:
-    On the Pi:
+2.  **Clone the Repository**:
+    Clone the project directly from GitHub to your Pi.
     ```bash
-    cd /home/pi/dibo-tracker
-    npm install
-    npm run build
+    cd /home/pi
+    git clone https://github.com/khoaang/dibo.git dibo-tracker
     ```
 
-3.  **Make the Startup Script Executable**:
+3.  **Run the Setup Script**:
+    Enter the directory and run the automated setup script.
     ```bash
-    chmod +x start-kiosk.sh
+    cd dibo-tracker
+    chmod +x setup-pi.sh
+    ./setup-pi.sh
     ```
 
-## 6. Setup Autostart (Kiosk Mode)
-
-We will use the LXDE autostart file to launch our script when the desktop loads.
-
-1.  **Create/Edit Autostart File**:
-    ```bash
-    mkdir -p /home/pi/.config/lxsession/LXDE-pi
-    nano /home/pi/.config/lxsession/LXDE-pi/autostart
-    ```
-
-2.  **Add the following line**:
-    ```bash
-    @/home/pi/dibo-tracker/start-kiosk.sh
-    ```
-    *Note: If the file already has content, add this line to the end. If the file is empty, add `@lxpanel --profile LXDE-pi` and `@pcmanfm --desktop --profile LXDE-pi` before it if you want the desktop to load underneath (optional for kiosk).*
-
-3.  **Reboot**:
+4.  **Reboot**:
+    Once the script finishes, reboot your Pi.
     ```bash
     sudo reboot
     ```
 
-## Troubleshooting
--   **Screen is upside down?**
-    Add `display_rotate=2` to `/boot/config.txt`.
--   **Touch is inverted?**
-    You might need to calibrate the touchscreen using `xinput_calibrator` (install via `sudo apt install xinput-calibrator`).
--   **App doesn't load?**
-    Check if the server is running by opening a terminal and running `curl http://localhost:3000`. If it fails, check the logs or try running `./start-kiosk.sh` manually to see errors.
-
-## Maintenance
+## 6. Maintenance (Auto-Updates)
 The app will now **automatically update** every time you reboot the Pi.
 1.  Push your changes to GitHub.
 2.  Reboot the Pi (`sudo reboot`).
