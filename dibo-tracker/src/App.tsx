@@ -98,6 +98,7 @@ function App() {
   const [profile, setProfile] = useState<DogProfile>(DEFAULT_PROFILE);
   const [draftProfile, setDraftProfile] = useState<DogProfile>(DEFAULT_PROFILE);
   const lyTrackRef = useRef<HTMLDivElement | null>(null);
+  const lySyncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [hasRemoteData, setHasRemoteData] = useState(false);
 
@@ -122,7 +123,8 @@ function App() {
   }, [profile]);
 
   useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 1000);
+    // Dashboard displays minutes, so second-by-second updates are unnecessary.
+    const timer = setInterval(() => setNow(new Date()), 10000);
     return () => clearInterval(timer);
   }, []);
 
@@ -204,11 +206,15 @@ function App() {
     setLyMeter(normalized);
     const firestore = db;
     if (!isFirebaseConfigured || !firestore) return;
-    void setDoc(
-      doc(firestore, "state", "ly"),
-      { value: normalized, updatedAt: Timestamp.now() },
-      { merge: true }
-    );
+    // Debounce writes while dragging for smoother UI.
+    if (lySyncTimeoutRef.current) clearTimeout(lySyncTimeoutRef.current);
+    lySyncTimeoutRef.current = setTimeout(() => {
+      void setDoc(
+        doc(firestore, "state", "ly"),
+        { value: normalized, updatedAt: Timestamp.now() },
+        { merge: true }
+      );
+    }, 120);
   };
 
   const updateLyFromClientY = (clientY: number) => {
@@ -224,6 +230,12 @@ function App() {
   useEffect(() => {
     if (view === "settings") setDraftProfile(profile);
   }, [view, profile]);
+
+  useEffect(() => {
+    return () => {
+      if (lySyncTimeoutRef.current) clearTimeout(lySyncTimeoutRef.current);
+    };
+  }, []);
 
   const openWalkEntry = () => {
     setWalkMode("new");
