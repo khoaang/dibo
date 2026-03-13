@@ -1,7 +1,19 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { format } from "date-fns";
 import { vi } from "date-fns/locale";
 import { ArrowLeft, Footprints, MoonStar, Sun, Trash2 } from "lucide-react";
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  onSnapshot,
+  orderBy,
+  query,
+  setDoc,
+  Timestamp,
+} from "firebase/firestore";
+import { db, isFirebaseConfigured } from "./lib/firebase";
 
 type EventType = "an_sang" | "di_bo" | "an_chieu";
 type View = "home" | "walk";
@@ -13,11 +25,6 @@ type EventItem = {
   peed?: boolean;
   pooped?: boolean;
 };
-
-function makeEvent(type: EventType, offsetHours: number): EventItem {
-  const time = new Date(Date.now() - offsetHours * 60 * 60 * 1000);
-  return { id: `${type}-${time.getTime()}`, type, time };
-}
 
 function isSameDay(a: Date, b: Date): boolean {
   return (
@@ -43,49 +50,131 @@ function getWalkButtonClass(lastEvent: EventItem | undefined, now: Date): string
 function App() {
   const [now, setNow] = useState(new Date());
   const [view, setView] = useState<View>("home");
-  const [events, setEvents] = useState<EventItem[]>([
-    makeEvent("an_sang", 10),
-    makeEvent("di_bo", 6),
-    makeEvent("an_chieu", 20),
-  ]);
+  const [events, setEvents] = useState<EventItem[]>([]);
   const [lyMeter, setLyMeter] = useState(20);
   const [walkPee, setWalkPee] = useState(false);
   const [walkPoop, setWalkPoop] = useState(false);
+  const lyDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    if (!isFirebaseConfigured || !db) return;
+
+    const eventsQuery = query(collection(db, "events"), orderBy("time", "desc"));
+    const unsubEvents = onSnapshot(eventsQuery, (snapshot) => {
+      const nextEvents: EventItem[] = snapshot.docs.map((entry) => {
+        const data = entry.data();
+        const rawTime = data.time;
+        const time =
+          rawTime instanceof Timestamp
+            ? rawTime.toDate()
+            : rawTime?.toDate
+              ? rawTime.toDate()
+              : new Date();
+        return {
+          id: entry.id,
+          type: data.type as EventType,
+          time,
+          peed: Boolean(data.peed),
+          pooped: Boolean(data.pooped),
+        };
+      });
+      setEvents(nextEvents);
+    });
+
+    const lyRef = doc(db, "state", "ly");
+    const unsubLy = onSnapshot(lyRef, (snap) => {
+      if (!snap.exists()) return;
+      const value = Number(snap.data().value);
+      if (!Number.isNaN(value)) setLyMeter(Math.max(0, Math.min(100, value)));
+    });
+
+    return () => {
+      unsubEvents();
+      unsubLy();
+    };
+  }, []);
+
+  const queueLySync = (value: number) => {
+    const firestore = db;
+    if (!isFirebaseConfigured || !firestore) return;
+    if (lyDebounceRef.current) clearTimeout(lyDebounceRef.current);
+    lyDebounceRef.current = setTimeout(() => {
+      void setDoc(doc(firestore, "state", "ly"), {
+        value,
+        updatedAt: Timestamp.now(),
+      });
+    }, 180);
+  };
+
+  const setLyValue = (value: number) => {
+    const normalized = Math.max(0, Math.min(100, value));
+    setLyMeter(normalized);
+    queueLySync(normalized);
+  };
+
   const addMealEvent = (type: "an_sang" | "an_chieu") => {
     const time = new Date();
-    setEvents((prev) => {
-      const withoutTodayMeal = prev.filter(
-        (item) => !(item.type === type && isSameDay(item.time, time))
-      );
-      return [{ id: `${type}-${time.getTime()}`, type, time }, ...withoutTodayMeal];
-    });
+    const todayMealLogs = events.filter((item) => item.type === type && isSameDay(item.time, time));
+
+    const firestore = db;
+    if (!isFirebaseConfigured || !firestore) {
+      setEvents((prev) => {
+        const withoutTodayMeal = prev.filter(
+          (item) => !(item.type === type && isSameDay(item.time, time))
+        );
+        return [{ id: `${type}-${time.getTime()}`, type, time }, ...withoutTodayMeal];
+      });
+      return;
+    }
+
+    void (async () => {
+      await Promise.all(todayMealLogs.map((item) => deleteDoc(doc(firestore, "events", item.id))));
+      await addDoc(collection(firestore, "events"), {
+        type,
+        time: Timestamp.fromDate(time),
+      });
+    })();
   };
 
   const saveWalkEvent = () => {
     const time = new Date();
-    setEvents((prev) => [
-      {
-        id: `di_bo-${time.getTime()}`,
+    const firestore = db;
+    if (!isFirebaseConfigured || !firestore) {
+      setEvents((prev) => [
+        {
+          id: `di_bo-${time.getTime()}`,
+          type: "di_bo",
+          time,
+          peed: walkPee,
+          pooped: walkPoop,
+        },
+        ...prev,
+      ]);
+    } else {
+      void addDoc(collection(firestore, "events"), {
         type: "di_bo",
-        time,
+        time: Timestamp.fromDate(time),
         peed: walkPee,
         pooped: walkPoop,
-      },
-      ...prev,
-    ]);
+      });
+    }
     setWalkPee(false);
     setWalkPoop(false);
     setView("home");
   };
 
   const removeEvent = (id: string) => {
-    setEvents((prev) => prev.filter((item) => item.id !== id));
+    const firestore = db;
+    if (!isFirebaseConfigured || !firestore) {
+      setEvents((prev) => prev.filter((item) => item.id !== id));
+      return;
+    }
+    void deleteDoc(doc(firestore, "events", id));
   };
 
   const lastAnSang = events.find((item) => item.type === "an_sang");
@@ -188,14 +277,14 @@ function App() {
           </div>
 
           <div className="relative mb-4">
-            <div className="h-4 rounded-full bg-gradient-to-r from-emerald-500 via-amber-400 to-rose-500" />
+            <div className="h-4 rounded-full bg-linear-to-r from-emerald-500 via-amber-400 to-rose-500" />
             <input
               type="range"
               min={0}
               max={100}
               step={1}
               value={lyMeter}
-              onChange={(e) => setLyMeter(Number(e.target.value))}
+              onChange={(e) => setLyValue(Number(e.target.value))}
               className="absolute inset-0 h-4 w-full cursor-pointer appearance-none bg-transparent [&::-webkit-slider-runnable-track]:h-4 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:mt-[-5px] [&::-webkit-slider-thumb]:h-6 [&::-webkit-slider-thumb]:w-6 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:bg-slate-900 [&::-webkit-slider-thumb]:shadow-md [&::-moz-range-track]:h-4 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-transparent [&::-moz-range-thumb]:h-6 [&::-moz-range-thumb]:w-6 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white [&::-moz-range-thumb]:bg-slate-900 [&::-moz-range-thumb]:shadow-md"
               aria-label="Lỳ meter"
             />

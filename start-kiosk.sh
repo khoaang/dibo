@@ -58,4 +58,4 @@ pkill unclutter >/dev/null 2>&1 || true
 unclutter -idle 0.1 -root &
 
 # Launch Chromium in Kiosk Mode
-chromium-browser --noerrdialogs --disable-infobars --kiosk http://localhost:3000 --check-for-update-interval=31536000
+chromium-browser --noerrdialogs --disable-infobars --kiosk --force-device-scale-factor=1.6 http://localhost:3000 --check-for-update-interval=31536000
