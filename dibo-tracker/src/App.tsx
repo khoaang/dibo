@@ -409,8 +409,10 @@ function App() {
       ? "border-rose-500/50 bg-rose-500/10 text-rose-200"
       : walkAgeHours < 4
         ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-200"
+        : walkAgeHours < 6
+          ? "border-yellow-500/50 bg-yellow-500/10 text-yellow-200"
         : walkAgeHours < 8
-          ? "border-amber-500/50 bg-amber-500/10 text-amber-200"
+          ? "border-orange-500/50 bg-orange-500/10 text-orange-200"
           : "border-rose-500/50 bg-rose-500/10 text-rose-200";
   const profileChanged =
     draftProfile.name.trim() !== profile.name || draftProfile.gender !== profile.gender;
