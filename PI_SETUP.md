@@ -80,16 +80,16 @@ If the screen resolution looks wrong (black bars or fuzzy), you need to edit `/b
     ```
 
 2.  **Clone the Repository**:
-    Clone the project directly from GitHub to your Pi.
+    Clone the project directly from GitHub to your Pi using the repo name `dibo`.
     ```bash
-    cd /home/pi
-    git clone https://github.com/khoaang/dibo.git dibo-tracker
+    cd /home/<your-user>
+    git clone https://github.com/khoaang/dibo.git
     ```
 
 3.  **Run the Setup Script**:
     Enter the directory and run the automated setup script.
     ```bash
-    cd dibo-tracker
+    cd dibo
     chmod +x setup-pi.sh
     ./setup-pi.sh
     ```
@@ -108,5 +108,5 @@ The app will now **automatically update** every time you reboot the Pi.
 
 If you need to update manually without rebooting:
 1.  SSH into the Pi.
-2.  `cd /home/pi/dibo-tracker`
+2.  `cd /home/<your-user>/dibo`
 3.  `./start-kiosk.sh` (This will run the update logic)

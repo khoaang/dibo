@@ -7,11 +7,13 @@ set -e # Exit on error
 
 echo "🐶 Starting Dibo Tracker Setup..."
 
-# Get the absolute path of the project directory
-PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CURRENT_USER=$(whoami)
+# Get the absolute path of the repo root and app directory
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_DIR="$REPO_DIR/dibo-tracker"
+CURRENT_USER="$(whoami)"
 
-echo "📂 Project Directory: $PROJECT_DIR"
+echo "📂 Repo Directory: $REPO_DIR"
+echo "📂 App Directory: $APP_DIR"
 echo "👤 User: $CURRENT_USER"
 
 # 1. Update System
@@ -47,29 +49,30 @@ sudo npm install -g serve
 
 # 5. Project Setup
 echo "📂 Setting up project dependencies..."
-cd "$PROJECT_DIR"
+cd "$REPO_DIR"
 
-# Configure Git if not already
-if [ ! -d ".git" ]; then
-    echo "⚙️ Initializing Git..."
-    git init
-    git branch -M main
-    git remote add origin https://github.com/khoaang/dibo.git
-    git fetch origin main
-    git reset --hard origin/main
+if [ ! -d "$APP_DIR" ]; then
+    echo "❌ App directory not found at: $APP_DIR"
+    echo "Expected repo layout: <repo>/dibo-tracker/package.json"
+    exit 1
 fi
+
+cd "$APP_DIR"
 
 echo "📦 Installing npm dependencies..."
 npm install
 echo "🏗 Building app..."
 npm run build
-chmod +x start-kiosk.sh
+
+# Go back to repo root
+cd "$REPO_DIR"
+chmod +x "$REPO_DIR/start-kiosk.sh"
 
 # 6. Setup Autostart
 echo "🚀 Configuring Autostart..."
 AUTOSTART_DIR="/home/$CURRENT_USER/.config/lxsession/LXDE-pi"
 AUTOSTART_FILE="$AUTOSTART_DIR/autostart"
-START_SCRIPT="$PROJECT_DIR/start-kiosk.sh"
+START_SCRIPT="$REPO_DIR/start-kiosk.sh"
 
 mkdir -p "$AUTOSTART_DIR"
 

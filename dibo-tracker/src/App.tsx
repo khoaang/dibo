@@ -1,21 +1,21 @@
 import { useState, useEffect } from 'react';
-import { Utensils, Footprints, Dog, Activity, Wifi } from 'lucide-react';
+import { Utensils, Footprints, Dog, Activity } from 'lucide-react';
 import { StatusCard } from './components/StatusCard';
 import { LyMeter } from './components/LyMeter';
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
 
-// Mock data for now - replace with Firebase logic later
+// Mock data
 const MOCK_DATA = {
   fedHistory: [
-    new Date(Date.now() - 1000 * 60 * 60 * 4), // 4 hours ago
-    new Date(Date.now() - 1000 * 60 * 60 * 28), // Yesterday
+    new Date(Date.now() - 1000 * 60 * 60 * 4), 
+    new Date(Date.now() - 1000 * 60 * 60 * 28),
   ],
   walkHistory: [
-    new Date(Date.now() - 1000 * 60 * 60 * 12), // 12 hours ago
-    new Date(Date.now() - 1000 * 60 * 60 * 36), // Yesterday
+    new Date(Date.now() - 1000 * 60 * 60 * 12),
+    new Date(Date.now() - 1000 * 60 * 60 * 36),
   ],
-  lyLevel: 15, // 0-100, 0 is good boy
+  lyLevel: 15,
 };
 
 function App() {
@@ -32,130 +32,114 @@ function App() {
   const handleFeed = () => {
     const now = new Date();
     setFedHistory(prev => [now, ...prev]);
-    // TODO: Save to Firebase
     console.log('Fed at:', now);
   };
 
   const handleWalk = () => {
     const now = new Date();
     setWalkHistory(prev => [now, ...prev]);
-    // TODO: Save to Firebase
     console.log('Walked at:', now);
   };
 
   const handleRemoveFed = (dateToRemove: Date) => {
     setFedHistory(prev => prev.filter(d => d.getTime() !== dateToRemove.getTime()));
-    // TODO: Sync with Firebase
   };
 
   const handleRemoveWalk = (dateToRemove: Date) => {
     setWalkHistory(prev => prev.filter(d => d.getTime() !== dateToRemove.getTime()));
-    // TODO: Sync with Firebase
   };
 
   const handleLyUpdate = (newLevel: number) => {
     setLyLevel(newLevel);
-    // TODO: Save to Firebase
     console.log('Ly Level updated to:', newLevel);
   };
 
+  // Calculate daily stats
+  const today = new Date().setHours(0,0,0,0);
+  const mealsToday = fedHistory.filter(d => d.getTime() >= today).length;
+  const walksToday = walkHistory.filter(d => d.getTime() >= today).length;
+
   return (
-    <div className="min-h-screen bg-black text-white p-6 font-sans select-none touch-manipulation overflow-hidden flex flex-col">
-      {/* Header / HUD Top Bar */}
-      <header className="flex justify-between items-center mb-8 border-b border-zinc-800 pb-4 relative">
-        <div className="absolute -bottom-[1px] left-0 w-1/3 h-[1px] bg-gradient-to-r from-blue-500 to-transparent" />
-        
+    <div className="h-screen w-screen bg-[#09090b] text-white p-6 font-sans select-none overflow-hidden flex flex-col">
+      
+      {/* Top Bar */}
+      <header className="flex justify-between items-start mb-6 shrink-0">
         <div className="flex items-center gap-4">
-          <div className="relative p-3 bg-zinc-900 border border-zinc-700 rounded-lg shadow-[0_0_15px_-3px_rgba(59,130,246,0.3)]">
-            <Dog size={32} className="text-blue-400" />
-            <div className="absolute top-0 right-0 w-2 h-2 bg-green-500 rounded-full animate-ping" />
+          <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-900/20">
+            <Dog size={28} className="text-white" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold tracking-tighter uppercase flex items-center gap-2">
-              DIBO_TRACKER <span className="text-xs bg-blue-900/30 text-blue-400 px-2 py-0.5 rounded border border-blue-500/30">v2.0</span>
-            </h1>
-            <p className="text-zinc-500 text-xs font-mono uppercase tracking-widest">System Online • Monitoring Active</p>
+            <h1 className="text-2xl font-bold tracking-tight leading-none">DIBO TRACKER</h1>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+              <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">System Online</span>
+            </div>
           </div>
         </div>
-        
-        <div className="text-right flex flex-col items-end">
-          <div className="flex items-center gap-2 text-xs font-mono text-zinc-600 mb-1">
-            <Wifi size={12} className="text-green-500" />
-            <span>CONNECTED</span>
+
+        <div className="text-right">
+          <div className="text-4xl font-mono font-bold tracking-tighter leading-none">
+            {format(currentTime, 'HH:mm')}
           </div>
-          <div className="text-4xl font-mono font-bold text-white tracking-widest">
-            {format(currentTime, 'HH:mm', { locale: vi })}
-          </div>
-          <div className="text-zinc-500 text-xs font-mono uppercase tracking-wider">
-            {format(currentTime, 'EEEE, d MMMM yyyy', { locale: vi })}
+          <div className="text-xs font-mono text-zinc-500 uppercase mt-1">
+            {format(currentTime, 'EEEE, d MMMM', { locale: vi })}
           </div>
         </div>
       </header>
 
-      {/* Main Content Grid */}
-      <main className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 flex-1">
+      {/* Main Grid */}
+      <main className="grid grid-cols-12 gap-6 flex-1 min-h-0">
         
-        {/* Feeding Card */}
-        <StatusCard
-          title="Feeding Status"
-          subtitle="Lần ăn cuối"
-          icon={Utensils}
-          history={fedHistory}
-          onAction={handleFeed}
-          onRemove={handleRemoveFed}
-          actionLabel="Confirm Feed"
-          accentColor="blue"
-        />
-
-        {/* Walking Card */}
-        <StatusCard
-          title="Patrol Log"
-          subtitle="Lần đi dạo cuối"
-          icon={Footprints}
-          history={walkHistory}
-          onAction={handleWalk}
-          onRemove={handleRemoveWalk}
-          actionLabel="Log Patrol"
-          accentColor="emerald"
-        />
-
-        {/* Ly Meter & Stats */}
-        <div className="flex flex-col gap-6">
-          <LyMeter 
-            level={lyLevel} 
-            onUpdate={handleLyUpdate} 
+        {/* Left Column: Status Cards */}
+        <div className="col-span-7 grid grid-rows-2 gap-6 h-full">
+          <StatusCard
+            title="Feeding"
+            label="Last Meal Time"
+            icon={Utensils}
+            history={fedHistory}
+            onAction={handleFeed}
+            onRemove={handleRemoveFed}
+            actionLabel="Log Meal"
+            accentColor="blue"
           />
+          <StatusCard
+            title="Patrol"
+            label="Last Walk Time"
+            icon={Footprints}
+            history={walkHistory}
+            onAction={handleWalk}
+            onRemove={handleRemoveWalk}
+            actionLabel="Log Patrol"
+            accentColor="emerald"
+          />
+        </div>
+
+        {/* Right Column: Ly Meter & Stats */}
+        <div className="col-span-5 flex flex-col gap-6 h-full">
+          <div className="flex-1">
+            <LyMeter level={lyLevel} onUpdate={handleLyUpdate} />
+          </div>
           
-          {/* Quick Stats / Mini HUD */}
-          <div className="flex-1 bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 relative overflow-hidden">
-             <div className="absolute top-0 right-0 p-2 opacity-20">
-                <Activity size={40} />
-             </div>
-             <h3 className="text-xs font-mono text-zinc-500 uppercase mb-4">Daily Summary</h3>
-             <div className="space-y-3">
-                <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
-                  <span className="text-sm text-zinc-400">Total Walks</span>
-                  <span className="font-mono font-bold text-emerald-400">02</span>
-                </div>
-                <div className="flex justify-between items-center border-b border-zinc-800 pb-2">
-                  <span className="text-sm text-zinc-400">Meals</span>
-                  <span className="font-mono font-bold text-blue-400">01</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-zinc-400">Avg. Lỳ Level</span>
-                  <span className="font-mono font-bold text-rose-400">15%</span>
-                </div>
-             </div>
+          {/* Daily Stats Summary */}
+          <div className="h-1/3 bg-zinc-900/30 border border-zinc-800 rounded-2xl p-5 flex flex-col justify-center">
+            <div className="flex items-center gap-2 mb-4 text-zinc-500">
+              <Activity size={16} />
+              <span className="text-xs font-mono uppercase tracking-widest">Daily Stats</span>
+            </div>
+            <div className="grid grid-cols-2 gap-8">
+              <div>
+                <div className="text-3xl font-mono font-bold text-white">{mealsToday}</div>
+                <div className="text-[10px] font-mono text-zinc-500 uppercase mt-1">Meals Today</div>
+              </div>
+              <div>
+                <div className="text-3xl font-mono font-bold text-white">{walksToday}</div>
+                <div className="text-[10px] font-mono text-zinc-500 uppercase mt-1">Walks Today</div>
+              </div>
+            </div>
           </div>
         </div>
 
       </main>
-      
-      {/* Footer / Status Bar */}
-      <footer className="mt-8 border-t border-zinc-900 pt-4 flex justify-between text-[10px] font-mono text-zinc-700 uppercase">
-        <div>System ID: RPI-4B-DIBO</div>
-        <div>Memory: OK • CPU: OK • Temp: 42°C</div>
-      </footer>
     </div>
   );
 }
