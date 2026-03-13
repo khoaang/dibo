@@ -1,13 +1,13 @@
 @import "tailwindcss";
 
 :root {
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
-  color-scheme: dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #09090b;
+  color-scheme: light;
+  color: #2f2c26;
+  background-color: #f3efe6;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -17,31 +17,15 @@
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
   min-width: 320px;
   min-height: 100vh;
-  background-image: 
-    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-  background-size: 30px 30px;
+  background: #f3efe6;
 }
 
-/* Custom scrollbar for history list */
-.custom-scrollbar::-webkit-scrollbar {
-  width: 4px;
+* {
+  box-sizing: border-box;
 }
 
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 2px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 2px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
+#root {
+  min-height: 100vh;
 }
