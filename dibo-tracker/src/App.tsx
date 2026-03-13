@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { format } from "date-fns";
-import { vi } from "date-fns/locale";
-import { ArrowLeft, Footprints, MoonStar, Sun, Trash2 } from "lucide-react";
+import { Check, Pencil, Settings, Trash2, X } from "lucide-react";
 import {
   addDoc,
   collection,
@@ -12,11 +11,13 @@ import {
   query,
   setDoc,
   Timestamp,
+  updateDoc,
 } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "./lib/firebase";
 
 type EventType = "an_sang" | "di_bo" | "an_chieu";
-type View = "home" | "walk";
+type DogGender = "male" | "female";
+type View = "dashboard" | "settings" | "walk";
 
 type EventItem = {
   id: string;
@@ -24,6 +25,16 @@ type EventItem = {
   time: Date;
   peed?: boolean;
   pooped?: boolean;
+};
+
+type DogProfile = {
+  name: string;
+  gender: DogGender;
+};
+
+const DEFAULT_PROFILE: DogProfile = {
+  name: "Carl",
+  gender: "male",
 };
 
 function isSameDay(a: Date, b: Date): boolean {
@@ -34,27 +45,47 @@ function isSameDay(a: Date, b: Date): boolean {
   );
 }
 
-function getMealButtonClass(lastEvent: EventItem | undefined, now: Date): string {
-  if (!lastEvent) return "bg-rose-500 text-white";
-  return isSameDay(lastEvent.time, now) ? "bg-emerald-500 text-white" : "bg-rose-500 text-white";
+function clampPercentage(value: number): number {
+  return Math.max(0, Math.min(100, value));
 }
 
-function getWalkButtonClass(lastEvent: EventItem | undefined, now: Date): string {
-  if (!lastEvent) return "bg-slate-400 text-white";
-  const hours = (now.getTime() - lastEvent.time.getTime()) / (1000 * 60 * 60);
-  if (hours < 4) return "bg-emerald-500 text-white";
-  if (hours < 8) return "bg-amber-500 text-white";
-  return "bg-rose-500 text-white";
+function pronoun(gender: DogGender): string {
+  return gender === "female" ? "she" : "he";
 }
 
 function App() {
   const [now, setNow] = useState(new Date());
-  const [view, setView] = useState<View>("home");
+  const [view, setView] = useState<View>("dashboard");
   const [events, setEvents] = useState<EventItem[]>([]);
   const [lyMeter, setLyMeter] = useState(20);
+  const [walkTimeInput, setWalkTimeInput] = useState(format(new Date(), "HH:mm"));
   const [walkPee, setWalkPee] = useState(false);
   const [walkPoop, setWalkPoop] = useState(false);
+  const [editingWalkId, setEditingWalkId] = useState<string | null>(null);
+  const [editingWalkTime, setEditingWalkTime] = useState("");
+  const [profile, setProfile] = useState<DogProfile>(DEFAULT_PROFILE);
+  const [draftProfile, setDraftProfile] = useState<DogProfile>(DEFAULT_PROFILE);
   const lyDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("dogProfile");
+    if (!saved) return;
+    try {
+      const parsed = JSON.parse(saved) as Partial<DogProfile>;
+      const next: DogProfile = {
+        name: (parsed.name || DEFAULT_PROFILE.name).trim() || DEFAULT_PROFILE.name,
+        gender: parsed.gender === "female" ? "female" : "male",
+      };
+      setProfile(next);
+      setDraftProfile(next);
+    } catch {
+      // Ignore invalid local state.
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("dogProfile", JSON.stringify(profile));
+  }, [profile]);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
@@ -90,14 +121,31 @@ function App() {
     const unsubLy = onSnapshot(lyRef, (snap) => {
       if (!snap.exists()) return;
       const value = Number(snap.data().value);
-      if (!Number.isNaN(value)) setLyMeter(Math.max(0, Math.min(100, value)));
+      if (!Number.isNaN(value)) setLyMeter(clampPercentage(value));
+    });
+
+    const profileRef = doc(db, "state", "profile");
+    const unsubProfile = onSnapshot(profileRef, (snap) => {
+      if (!snap.exists()) return;
+      const data = snap.data();
+      const nextProfile: DogProfile = {
+        name: (String(data.name || DEFAULT_PROFILE.name).trim() || DEFAULT_PROFILE.name).slice(0, 40),
+        gender: data.gender === "female" ? "female" : "male",
+      };
+      setProfile(nextProfile);
+      setDraftProfile(nextProfile);
     });
 
     return () => {
       unsubEvents();
       unsubLy();
+      unsubProfile();
     };
   }, []);
+
+  useEffect(() => {
+    if (view === "settings") setDraftProfile(profile);
+  }, [view, profile]);
 
   const queueLySync = (value: number) => {
     const firestore = db;
@@ -112,7 +160,7 @@ function App() {
   };
 
   const setLyValue = (value: number) => {
-    const normalized = Math.max(0, Math.min(100, value));
+    const normalized = clampPercentage(value);
     setLyMeter(normalized);
     queueLySync(normalized);
   };
@@ -120,41 +168,42 @@ function App() {
   const addMealEvent = (type: "an_sang" | "an_chieu") => {
     const time = new Date();
     const todayMealLogs = events.filter((item) => item.type === type && isSameDay(item.time, time));
-
     const firestore = db;
+
     if (!isFirebaseConfigured || !firestore) {
       setEvents((prev) => {
-        const withoutTodayMeal = prev.filter(
-          (item) => !(item.type === type && isSameDay(item.time, time))
-        );
-        return [{ id: `${type}-${time.getTime()}`, type, time }, ...withoutTodayMeal];
+        const withoutToday = prev.filter((item) => !(item.type === type && isSameDay(item.time, time)));
+        return [{ id: `${type}-${time.getTime()}`, type, time }, ...withoutToday];
       });
       return;
     }
 
     void (async () => {
       await Promise.all(todayMealLogs.map((item) => deleteDoc(doc(firestore, "events", item.id))));
-      await addDoc(collection(firestore, "events"), {
-        type,
-        time: Timestamp.fromDate(time),
-      });
+      await addDoc(collection(firestore, "events"), { type, time: Timestamp.fromDate(time) });
     })();
   };
 
-  const saveWalkEvent = () => {
+  const saveWalk = () => {
+    const [hourText, minuteText] = walkTimeInput.split(":");
+    const h = Number(hourText);
+    const m = Number(minuteText);
     const time = new Date();
+    if (!Number.isNaN(h) && !Number.isNaN(m) && h >= 0 && h <= 23 && m >= 0 && m <= 59) {
+      time.setHours(h, m, 0, 0);
+    }
+
+    const newWalk: EventItem = {
+      id: `di_bo-${time.getTime()}`,
+      type: "di_bo",
+      time,
+      peed: walkPee,
+      pooped: walkPoop,
+    };
+
     const firestore = db;
     if (!isFirebaseConfigured || !firestore) {
-      setEvents((prev) => [
-        {
-          id: `di_bo-${time.getTime()}`,
-          type: "di_bo",
-          time,
-          peed: walkPee,
-          pooped: walkPoop,
-        },
-        ...prev,
-      ]);
+      setEvents((prev) => [newWalk, ...prev].sort((a, b) => b.time.getTime() - a.time.getTime()));
     } else {
       void addDoc(collection(firestore, "events"), {
         type: "di_bo",
@@ -163,12 +212,57 @@ function App() {
         pooped: walkPoop,
       });
     }
+    setWalkTimeInput(format(new Date(), "HH:mm"));
     setWalkPee(false);
     setWalkPoop(false);
-    setView("home");
+    setView("dashboard");
+  };
+
+  const openWalkEntry = () => {
+    setWalkTimeInput(format(new Date(), "HH:mm"));
+    setWalkPee(false);
+    setWalkPoop(false);
+    setView("walk");
+  };
+
+  const startEditWalk = (item: EventItem) => {
+    setEditingWalkId(item.id);
+    setEditingWalkTime(format(item.time, "HH:mm"));
+  };
+
+  const cancelEditWalk = () => {
+    setEditingWalkId(null);
+    setEditingWalkTime("");
+  };
+
+  const saveEditedWalk = (id: string) => {
+    const target = events.find((item) => item.id === id && item.type === "di_bo");
+    if (!target) return;
+    const [hText, mText] = editingWalkTime.split(":");
+    const h = Number(hText);
+    const m = Number(mText);
+    if (Number.isNaN(h) || Number.isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) return;
+
+    const nextTime = new Date(target.time);
+    nextTime.setHours(h, m, 0, 0);
+
+    const firestore = db;
+    if (!isFirebaseConfigured || !firestore) {
+      setEvents((prev) =>
+        [...prev.map((item) => (item.id === id ? { ...item, time: nextTime } : item))].sort(
+          (a, b) => b.time.getTime() - a.time.getTime()
+        )
+      );
+      cancelEditWalk();
+      return;
+    }
+    void updateDoc(doc(firestore, "events", id), { time: Timestamp.fromDate(nextTime) }).finally(() => {
+      cancelEditWalk();
+    });
   };
 
   const removeEvent = (id: string) => {
+    if (editingWalkId === id) cancelEditWalk();
     const firestore = db;
     if (!isFirebaseConfigured || !firestore) {
       setEvents((prev) => prev.filter((item) => item.id !== id));
@@ -177,236 +271,320 @@ function App() {
     void deleteDoc(doc(firestore, "events", id));
   };
 
-  const lastAnSang = events.find((item) => item.type === "an_sang");
-  const lastDiBo = events.find((item) => item.type === "di_bo");
-  const lastAnChieu = events.find((item) => item.type === "an_chieu");
+  const saveProfile = () => {
+    const nextProfile: DogProfile = {
+      name: draftProfile.name.trim() || DEFAULT_PROFILE.name,
+      gender: draftProfile.gender,
+    };
+    setProfile(nextProfile);
+
+    const firestore = db;
+    if (!isFirebaseConfigured || !firestore) {
+      setView("dashboard");
+      return;
+    }
+    void setDoc(
+      doc(firestore, "state", "profile"),
+      { name: nextProfile.name, gender: nextProfile.gender, updatedAt: Timestamp.now() },
+      { merge: true }
+    ).finally(() => setView("dashboard"));
+  };
+
+  const lastBreakfast = events.find((item) => item.type === "an_sang");
+  const lastDinner = events.find((item) => item.type === "an_chieu");
   const todayWalks = events.filter((item) => item.type === "di_bo" && isSameDay(item.time, now));
-  const lastAnSangText = lastAnSang ? format(lastAnSang.time, "HH:mm") : "--";
-  const lastDiBoText = lastDiBo ? format(lastDiBo.time, "HH:mm") : "--";
-  const lastAnChieuText = lastAnChieu ? format(lastAnChieu.time, "HH:mm") : "--";
+  const profileChanged =
+    draftProfile.name.trim() !== profile.name || draftProfile.gender !== profile.gender;
+
+  if (view === "settings") {
+    return (
+      <div className="min-h-screen bg-slate-950 px-2 py-2 text-slate-100">
+        <div className="mx-auto w-full max-w-3xl p-1">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-base font-bold">Settings</h2>
+            <button
+              onClick={() => setView("dashboard")}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-700 bg-slate-800 text-slate-200 transition hover:bg-slate-700"
+              aria-label="Close settings"
+            >
+              <X size={16} />
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            <label className="block">
+              <div className="mb-1 text-sm font-semibold text-slate-200">Dog name</div>
+              <input
+                value={draftProfile.name}
+                onChange={(e) =>
+                  setDraftProfile((prev) => ({
+                    ...prev,
+                    name: e.target.value.slice(0, 40),
+                  }))
+                }
+                className="h-11 w-full rounded border border-slate-700 bg-slate-950 px-2 text-base text-slate-100 outline-none ring-cyan-500 transition focus:ring-2"
+              />
+            </label>
+
+            <div>
+              <div className="mb-1 text-sm font-semibold text-slate-200">Dog gender</div>
+              <div className="grid grid-cols-2 gap-1">
+                <button
+                  onClick={() => setDraftProfile((prev) => ({ ...prev, gender: "male" }))}
+                  className={`h-11 rounded border text-sm font-semibold ${
+                    draftProfile.gender === "male"
+                      ? "border-cyan-500 bg-cyan-500 text-slate-950"
+                      : "border-slate-700 bg-slate-800 text-slate-200"
+                  }`}
+                >
+                  Boy
+                </button>
+                <button
+                  onClick={() => setDraftProfile((prev) => ({ ...prev, gender: "female" }))}
+                  className={`h-11 rounded border text-sm font-semibold ${
+                    draftProfile.gender === "female"
+                      ? "border-cyan-500 bg-cyan-500 text-slate-950"
+                      : "border-slate-700 bg-slate-800 text-slate-200"
+                  }`}
+                >
+                  Girl
+                </button>
+              </div>
+            </div>
+
+            <div className="px-0.5 text-sm text-slate-400">Preview: Did {pronoun(draftProfile.gender)} eat breakfast?</div>
+
+            <button
+              onClick={saveProfile}
+              disabled={!profileChanged}
+              className="h-11 w-full rounded border border-emerald-500 bg-emerald-500 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-700 disabled:text-slate-400"
+            >
+              Save settings
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (view === "walk") {
     return (
-      <div className="min-h-screen bg-[#f7f7f5] p-[clamp(0.75rem,1.6vw,1.25rem)] font-mono text-[#1f2937]">
-        <div className="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,rgba(56,189,248,0.14),transparent_55%),radial-gradient(ellipse_at_bottom,rgba(16,185,129,0.08),transparent_45%),repeating-linear-gradient(0deg,rgba(15,23,42,0.03)_0_1px,transparent_1px_18px),repeating-linear-gradient(90deg,rgba(15,23,42,0.03)_0_1px,transparent_1px_18px)]" />
-        <div className="mx-auto w-full max-w-[min(100%,56rem)]">
-          <button
-            onClick={() => setView("home")}
-            className="mb-[clamp(0.6rem,1.5vw,1rem)] inline-flex h-[clamp(2.75rem,6vw,3.5rem)] items-center gap-2 rounded-lg border-2 border-slate-300/70 bg-white/90 px-[clamp(0.9rem,2.2vw,1.4rem)] text-[clamp(0.95rem,1.8vw,1.15rem)] font-medium shadow-[4px_4px_0_rgba(15,23,42,0.12)] backdrop-blur-sm transition hover:translate-x-px hover:translate-y-px hover:shadow-[3px_3px_0_rgba(15,23,42,0.12)]"
-          >
-            <ArrowLeft size={18} />
-            Quay lại
-          </button>
+      <div className="min-h-screen bg-slate-950 px-2 py-2 text-slate-100">
+        <div className="mx-auto w-full max-w-3xl p-1">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-base font-bold">Walk details</h2>
+            <button
+              onClick={() => setView("dashboard")}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-700 bg-slate-800 text-slate-200 transition hover:bg-slate-700"
+              aria-label="Close walk details"
+            >
+              <X size={16} />
+            </button>
+          </div>
 
-          <section className="rounded-2xl border-2 border-sky-100/90 bg-white/90 p-[clamp(0.95rem,2.4vw,1.5rem)] shadow-[6px_6px_0_rgba(14,116,144,0.12)] backdrop-blur-md">
-            <h1 className="mb-[clamp(0.75rem,1.8vw,1.2rem)] text-[clamp(1.45rem,3vw,2.15rem)] font-semibold tracking-wide text-slate-800">
-              Log đi bộ
-            </h1>
+          <div className="space-y-2">
+            <label className="block">
+              <div className="mb-1 text-sm font-semibold text-slate-200">Walk time</div>
+              <input
+                type="time"
+                value={walkTimeInput}
+                onChange={(e) => setWalkTimeInput(e.target.value)}
+                className="h-11 w-full rounded border border-slate-700 bg-slate-950 px-2 text-base text-slate-100 outline-none ring-cyan-500 transition focus:ring-2"
+                aria-label="Walk time"
+              />
+            </label>
 
-            <div className="mb-[clamp(0.75rem,1.9vw,1.2rem)]">
-              <p className="mb-2 text-[clamp(0.95rem,1.9vw,1.1rem)] font-medium text-slate-600">Bé có đái không?</p>
+            <div className="grid grid-cols-2 gap-1">
               <button
-                onClick={() => setWalkPee((v) => !v)}
-                className={`h-[clamp(3.2rem,8vw,4.2rem)] w-full rounded-2xl text-[clamp(1rem,2.2vw,1.25rem)] font-medium transition ${
+                onClick={() => setWalkPee((prev) => !prev)}
+                className={`h-11 rounded border px-2 text-sm font-semibold transition ${
                   walkPee
-                    ? "border-2 border-emerald-700/30 bg-emerald-500 text-white shadow-[4px_4px_0_rgba(5,150,105,0.32)]"
-                    : "border-2 border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                    ? "border-emerald-500 bg-emerald-500/20 text-emerald-300"
+                    : "border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800"
                 }`}
               >
-                {walkPee ? "Có đái" : "Chưa đái"}
+                Pee: {walkPee ? "Yes" : "No"}
               </button>
-            </div>
-
-            <div className="mb-[clamp(0.95rem,2.2vw,1.35rem)]">
-              <p className="mb-2 text-[clamp(0.95rem,1.9vw,1.1rem)] font-medium text-slate-600">Bé có ỉa không?</p>
               <button
-                onClick={() => setWalkPoop((v) => !v)}
-                className={`h-[clamp(3.2rem,8vw,4.2rem)] w-full rounded-2xl text-[clamp(1rem,2.2vw,1.25rem)] font-medium transition ${
+                onClick={() => setWalkPoop((prev) => !prev)}
+                className={`h-11 rounded border px-2 text-sm font-semibold transition ${
                   walkPoop
-                    ? "border-2 border-amber-700/30 bg-amber-500 text-white shadow-[4px_4px_0_rgba(217,119,6,0.3)]"
-                    : "border-2 border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                    ? "border-emerald-500 bg-emerald-500/20 text-emerald-300"
+                    : "border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800"
                 }`}
               >
-                {walkPoop ? "Có ỉa" : "Chưa ỉa"}
+                Poop: {walkPoop ? "Yes" : "No"}
               </button>
             </div>
 
             <button
-              onClick={saveWalkEvent}
-              className="h-[clamp(3.2rem,8vw,4.2rem)] w-full rounded-2xl border-2 border-sky-900/20 bg-sky-600 text-[clamp(1rem,2.3vw,1.25rem)] font-semibold text-white shadow-[4px_4px_0_rgba(3,105,161,0.36)] transition hover:bg-sky-500"
+              onClick={saveWalk}
+              className="h-11 w-full rounded border border-cyan-500 bg-cyan-500 px-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
             >
-              Lưu log đi bộ
+              Save walk
             </button>
-          </section>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#f7f7f5] p-[clamp(0.75rem,1.6vw,1.25rem)] font-mono text-[#1f2937]">
-      <div className="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(ellipse_at_top_right,rgba(14,165,233,0.16),transparent_52%),radial-gradient(ellipse_at_bottom_left,rgba(16,185,129,0.08),transparent_48%),repeating-linear-gradient(0deg,rgba(15,23,42,0.03)_0_1px,transparent_1px_18px),repeating-linear-gradient(90deg,rgba(15,23,42,0.03)_0_1px,transparent_1px_18px)]" />
-      <div className="mx-auto w-full max-w-[min(100%,96rem)]">
-        <div className="mb-[clamp(0.7rem,1.6vw,1.25rem)] flex items-center justify-end text-right">
-          <div>
-            <div className="text-[clamp(2rem,6vw,4.25rem)] font-semibold leading-none tracking-tight text-slate-800 [text-shadow:2px_2px_0_rgba(125,211,252,0.25)]">
-              {format(now, "HH:mm")}
+    <div className="min-h-screen bg-slate-950 px-2 py-2 text-slate-100">
+      <div className="relative mx-auto w-full max-w-3xl space-y-2 pt-1">
+        <button
+          onClick={() => setView("settings")}
+          className="absolute right-0 top-0 inline-flex h-8 w-8 items-center justify-center rounded border border-slate-700 bg-slate-900 text-slate-200 transition hover:bg-slate-800"
+          aria-label="Open settings"
+        >
+          <Settings size={14} />
+        </button>
+
+        <section className="grid grid-cols-2 gap-1 pr-9">
+          <article className="px-1 py-1">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Current time</div>
+            <div className="mt-1 text-3xl font-bold tabular-nums leading-none">{format(now, "HH:mm:ss")}</div>
+          </article>
+
+          <article className="px-1 py-1">
+            <div className="mb-1 flex items-center justify-between">
+              <div className="text-xs font-semibold uppercase tracking-wide text-fuchsia-200">Ly meter</div>
+              <div className="rounded bg-fuchsia-500/20 px-1.5 py-0.5 text-sm font-bold text-fuchsia-100">
+                {lyMeter}%
+              </div>
             </div>
-            <div className="mt-1 text-[clamp(0.8rem,1.7vw,1.05rem)] uppercase tracking-[0.12em] text-slate-500">
-              {format(now, "dd/MM", { locale: vi })}
+            <div className="relative h-9">
+              <div className="absolute inset-x-0 top-1/2 h-3 -translate-y-1/2 rounded-full bg-linear-to-r from-emerald-400 via-amber-400 to-rose-500 opacity-90" />
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={lyMeter}
+                onChange={(e) => setLyValue(Number(e.target.value))}
+                className="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent [&::-webkit-slider-runnable-track]:h-3 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:mt-[-7px] [&::-webkit-slider-thumb]:h-7 [&::-webkit-slider-thumb]:w-7 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white/70 [&::-webkit-slider-thumb]:bg-fuchsia-500 [&::-webkit-slider-thumb]:shadow-[0_0_0_3px_rgba(217,70,239,0.3)] [&::-moz-range-track]:h-3 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-transparent [&::-moz-range-thumb]:h-7 [&::-moz-range-thumb]:w-7 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white/70 [&::-moz-range-thumb]:bg-fuchsia-500"
+                aria-label="Ly meter"
+              />
             </div>
-          </div>
-        </div>
-
-        <main className="grid gap-[clamp(0.65rem,1.5vw,1rem)] lg:grid-cols-12">
-          <MealsPanel
-            anSangClass={getMealButtonClass(lastAnSang, now)}
-            anChieuClass={getMealButtonClass(lastAnChieu, now)}
-            anSangTime={lastAnSangText}
-            anChieuTime={lastAnChieuText}
-            onAnSang={() => addMealEvent("an_sang")}
-            onAnChieu={() => addMealEvent("an_chieu")}
-          />
-
-          <div className="rounded-2xl border-2 border-cyan-100/90 bg-white/90 p-[clamp(0.75rem,1.8vw,1.2rem)] shadow-[6px_6px_0_rgba(15,23,42,0.1)] backdrop-blur-md lg:col-span-8">
-            <div className="mb-2 text-[clamp(0.95rem,1.8vw,1.15rem)] font-semibold uppercase tracking-widest text-slate-700">
-              Đi bộ hôm nay
-            </div>
-            <WalkPill
-              title="Đi bộ"
-              icon={<Footprints size={18} />}
-              buttonClass={getWalkButtonClass(lastDiBo, now)}
-              lastTime={lastDiBoText}
-              todayWalks={todayWalks}
-              onPress={() => setView("walk")}
-              onRemove={removeEvent}
-            />
-          </div>
-        </main>
-
-        <section className="mt-[clamp(0.8rem,1.8vw,1.35rem)] rounded-2xl border-2 border-violet-100/90 bg-white/90 p-[clamp(0.95rem,2.2vw,1.5rem)] shadow-[6px_6px_0_rgba(76,29,149,0.12)] backdrop-blur-md">
-          <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-[clamp(1.1rem,2.1vw,1.55rem)] font-semibold uppercase tracking-[0.08em]">Lỳ meter</h2>
-            <span className="text-[clamp(1.1rem,2.1vw,1.55rem)] font-semibold">{lyMeter}%</span>
-          </div>
-
-          <div className="relative mb-4 h-[clamp(2.8rem,7vw,3.6rem)]">
-            <div className="absolute inset-x-0 top-1/2 h-[clamp(0.85rem,1.9vw,1.2rem)] -translate-y-1/2 rounded-full bg-linear-to-r from-emerald-500 via-amber-400 to-rose-500" />
-            <input
-              type="range"
-              min={0}
-              max={100}
-              step={1}
-              value={lyMeter}
-              onChange={(e) => setLyValue(Number(e.target.value))}
-              className="absolute inset-0 h-full w-full cursor-pointer touch-none appearance-none bg-transparent [&::-webkit-slider-runnable-track]:h-[clamp(0.85rem,1.9vw,1.2rem)] [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-transparent [&::-webkit-slider-thumb]:mt-[-11px] [&::-webkit-slider-thumb]:h-10 [&::-webkit-slider-thumb]:w-10 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-md [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:bg-slate-900 [&::-webkit-slider-thumb]:shadow-[3px_3px_0_rgba(15,23,42,0.45)] [&::-moz-range-track]:h-[clamp(0.85rem,1.9vw,1.2rem)] [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-transparent [&::-moz-range-thumb]:h-10 [&::-moz-range-thumb]:w-10 [&::-moz-range-thumb]:rounded-md [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white [&::-moz-range-thumb]:bg-slate-900 [&::-moz-range-thumb]:shadow-[3px_3px_0_rgba(15,23,42,0.45)]"
-              aria-label="Lỳ meter"
-            />
-          </div>
+          </article>
         </section>
-      </div>
-    </div>
-  );
-}
 
-function MealsPanel({
-  anSangClass,
-  anChieuClass,
-  anSangTime,
-  anChieuTime,
-  onAnSang,
-  onAnChieu,
-}: {
-  anSangClass: string;
-  anChieuClass: string;
-  anSangTime: string;
-  anChieuTime: string;
-  onAnSang: () => void;
-  onAnChieu: () => void;
-}) {
-  return (
-    <div className="rounded-2xl border-2 border-sky-100/90 bg-linear-to-br from-sky-50/90 to-indigo-50/85 p-[clamp(0.6rem,1.4vw,1rem)] shadow-[6px_6px_0_rgba(14,116,144,0.14)] backdrop-blur-md lg:col-span-4">
-      <div className="mb-2 px-1 text-[clamp(0.95rem,1.8vw,1.15rem)] font-semibold uppercase tracking-widest text-slate-700">
-        Bữa ăn
-      </div>
-      <button
-        onClick={onAnSang}
-        className={`flex h-[clamp(2.7rem,6vw,3.4rem)] w-full items-center justify-center gap-2 rounded-xl border-2 border-slate-900/10 text-[clamp(0.95rem,1.8vw,1.15rem)] font-semibold shadow-[3px_3px_0_rgba(15,23,42,0.14)] transition hover:translate-x-px hover:translate-y-px hover:shadow-[2px_2px_0_rgba(15,23,42,0.14)] ${anSangClass}`}
-      >
-        <Sun size={18} />
-        Ăn sáng
-      </button>
-      <div className="mb-2 mt-1 text-center text-[clamp(1.45rem,3.3vw,2.35rem)] font-bold tracking-tight text-slate-700">
-        {anSangTime}
-      </div>
-
-      <button
-        onClick={onAnChieu}
-        className={`flex h-[clamp(2.7rem,6vw,3.4rem)] w-full items-center justify-center gap-2 rounded-xl border-2 border-slate-900/10 text-[clamp(0.95rem,1.8vw,1.15rem)] font-semibold shadow-[3px_3px_0_rgba(15,23,42,0.14)] transition hover:translate-x-px hover:translate-y-px hover:shadow-[2px_2px_0_rgba(15,23,42,0.14)] ${anChieuClass}`}
-      >
-        <MoonStar size={18} />
-        Ăn chiều
-      </button>
-      <div className="mt-1 text-center text-[clamp(1.45rem,3.3vw,2.35rem)] font-bold tracking-tight text-slate-700">
-        {anChieuTime}
-      </div>
-    </div>
-  );
-}
-
-function WalkPill({
-  title,
-  icon,
-  buttonClass,
-  lastTime,
-  todayWalks,
-  onPress,
-  onRemove,
-}: {
-  title: string;
-  icon: React.ReactNode;
-  buttonClass: string;
-  lastTime: string;
-  todayWalks: EventItem[];
-  onPress: () => void;
-  onRemove: (id: string) => void;
-}) {
-  return (
-    <div>
-      <button
-        onClick={onPress}
-        className={`flex h-[clamp(3.2rem,8vw,4.2rem)] w-full items-center justify-center gap-2 rounded-2xl border-2 border-slate-900/10 text-[clamp(1rem,2.2vw,1.25rem)] font-semibold shadow-[4px_4px_0_rgba(15,23,42,0.2)] transition hover:translate-x-px hover:translate-y-px hover:shadow-[3px_3px_0_rgba(15,23,42,0.2)] ${buttonClass}`}
-      >
-        {icon}
-        {title}
-      </button>
-      <div className="mt-1 text-center text-[clamp(1.6rem,4.2vw,2.85rem)] font-bold tracking-tight text-slate-700">
-        {lastTime}
-      </div>
-
-      <div className="mt-2 max-h-[clamp(14rem,36vh,24rem)] overflow-auto rounded-xl border-2 border-slate-200/80 bg-white/80 p-[clamp(0.45rem,1vw,0.75rem)]">
-        {todayWalks.length === 0 ? (
-          <div className="px-2 py-2 text-[clamp(0.9rem,1.8vw,1.08rem)] text-slate-400">Chưa có đi bộ hôm nay</div>
-        ) : null}
-        {todayWalks.map((item) => (
-          <div key={item.id} className="mb-1 flex items-center justify-between rounded-lg border-2 border-slate-200/70 bg-white px-2 py-[clamp(0.4rem,1.1vw,0.6rem)] shadow-[2px_2px_0_rgba(15,23,42,0.08)] last:mb-0">
-            <div className="flex items-center gap-2 text-[clamp(0.9rem,1.8vw,1.08rem)]">
-              <span className="font-semibold">{format(item.time, "HH:mm")}</span>
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[clamp(0.75rem,1.6vw,0.95rem)] text-slate-600">
-                {(item.peed ? "Đái" : "") +
-                  (item.peed && item.pooped ? ", " : "") +
-                  (item.pooped ? "Ỉa" : "") || "Không"}
-              </span>
-            </div>
+        <section className="border-t border-slate-800 pt-2">
+          <h2 className="text-base font-bold">{profile.name}'s meals</h2>
+          <div className="mt-2 grid grid-cols-2 gap-1">
             <button
-              onClick={() => onRemove(item.id)}
-              className="rounded border border-transparent p-1 text-slate-400 transition hover:border-red-200 hover:bg-red-50 hover:text-red-500"
-              aria-label="Xóa log"
+              onClick={() => addMealEvent("an_sang")}
+              className="h-12 rounded border border-slate-700 bg-slate-800 px-2 text-sm font-semibold text-slate-100 transition hover:bg-slate-700"
             >
-              <Trash2 size={14} />
+              <div>Breakfast</div>
+              <div className="mt-0.5 text-base tabular-nums">{lastBreakfast ? format(lastBreakfast.time, "HH:mm") : "--"}</div>
+            </button>
+            <button
+              onClick={() => addMealEvent("an_chieu")}
+              className="h-12 rounded border border-slate-700 bg-slate-800 px-2 text-sm font-semibold text-slate-100 transition hover:bg-slate-700"
+            >
+              <div>Dinner</div>
+              <div className="mt-0.5 text-base tabular-nums">{lastDinner ? format(lastDinner.time, "HH:mm") : "--"}</div>
             </button>
           </div>
-        ))}
+        </section>
+
+        <section className="border-t border-slate-800 pt-2">
+          <h2 className="text-base font-bold">{profile.name}'s walks</h2>
+          <div className="mt-2">
+            <button
+              onClick={openWalkEntry}
+              className="h-11 w-full rounded border border-cyan-500 bg-cyan-500 px-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400"
+            >
+              Add walk details
+            </button>
+          </div>
+
+          <div className="mt-2 max-h-88 overflow-auto">
+            <table className="w-full text-left text-base">
+              <thead className="sticky top-0 bg-slate-950 text-slate-300">
+                <tr>
+                  <th className="border-b border-slate-700 px-2 py-3 text-lg font-bold">Time</th>
+                  <th className="border-b border-slate-700 px-2 py-3 text-lg font-bold">Pee / Poop</th>
+                  <th className="border-b border-slate-700 px-2 py-3 text-base font-semibold">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {todayWalks.length === 0 ? (
+                  <tr>
+                    <td className="px-2 py-4 text-base text-slate-400" colSpan={3}>
+                      No walks logged today.
+                    </td>
+                  </tr>
+                ) : (
+                  todayWalks.map((item) => (
+                    <tr key={item.id} className="border-b border-slate-800">
+                      <td className="px-2 py-3 text-3xl font-bold tabular-nums leading-none">
+                        {editingWalkId === item.id ? (
+                          <input
+                            type="time"
+                            value={editingWalkTime}
+                            onChange={(e) => setEditingWalkTime(e.target.value)}
+                            className="h-12 w-40 rounded border border-slate-700 bg-slate-950 px-2 text-2xl font-semibold outline-none ring-cyan-500 transition focus:ring-2"
+                            aria-label="Edit walk time"
+                          />
+                        ) : (
+                          <div>{format(item.time, "HH:mm")}</div>
+                        )}
+                      </td>
+                      <td className="px-2 py-3 text-2xl font-semibold leading-none text-slate-200">
+                        {(item.peed ? "Pee" : "") +
+                          (item.peed && item.pooped ? ", " : "") +
+                          (item.pooped ? "Poop" : "") || "None"}
+                      </td>
+                      <td className="px-2 py-3">
+                        <div className="flex flex-wrap gap-1">
+                          {editingWalkId === item.id ? (
+                            <>
+                              <button
+                                onClick={() => saveEditedWalk(item.id)}
+                                className="inline-flex h-9 items-center gap-1 rounded border border-emerald-500/40 bg-emerald-500/15 px-2 text-sm font-semibold text-emerald-300"
+                                aria-label="Save walk time"
+                              >
+                                <Check size={14} />
+                                Save
+                              </button>
+                              <button
+                                onClick={cancelEditWalk}
+                                className="inline-flex h-9 items-center gap-1 rounded border border-slate-700 bg-slate-800 px-2 text-sm font-semibold text-slate-200"
+                                aria-label="Cancel walk edit"
+                              >
+                                <X size={14} />
+                                Cancel
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              onClick={() => startEditWalk(item)}
+                              className="inline-flex h-9 items-center gap-1 rounded border border-cyan-500/40 bg-cyan-500/15 px-2 text-sm font-semibold text-cyan-300"
+                              aria-label="Edit walk"
+                            >
+                              <Pencil size={14} />
+                              Edit
+                            </button>
+                          )}
+                          <button
+                            onClick={() => removeEvent(item.id)}
+                            className="inline-flex h-9 items-center gap-1 rounded border border-rose-500/40 bg-rose-500/15 px-2 text-sm font-semibold text-rose-300"
+                            aria-label="Delete walk"
+                          >
+                            <Trash2 size={14} />
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
       </div>
     </div>
   );
