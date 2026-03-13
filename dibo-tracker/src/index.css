@@ -7,8 +7,8 @@
   font-size: clamp(15px, 1.4vw + 0.6rem, 22px);
 
   color-scheme: dark;
-  color: #e2e8f0;
-  background-color: #020617;
+  color: #f6eadb;
+  background-color: #2a2118;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -20,7 +20,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background: #020617;
+  background: #2a2118;
 }
 
 button,
