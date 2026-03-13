@@ -38,11 +38,21 @@ const DEFAULT_PROFILE: DogProfile = {
   gender: "male",
 };
 
+const DAY_RESET_HOUR = 3; // Day resets at 3am (e.g. 2:59am is still "yesterday")
+
+function getLogicalDate(d: Date): Date {
+  const shifted = new Date(d);
+  shifted.setHours(shifted.getHours() - DAY_RESET_HOUR);
+  return shifted;
+}
+
 function isSameDay(a: Date, b: Date): boolean {
+  const da = getLogicalDate(a);
+  const db = getLogicalDate(b);
   return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
+    da.getFullYear() === db.getFullYear() &&
+    da.getMonth() === db.getMonth() &&
+    da.getDate() === db.getDate()
   );
 }
 
