@@ -2,18 +2,36 @@
 
 set -u
 
+# Log to file for debugging (remove in production if desired)
+exec >> /tmp/dibo-kiosk.log 2>&1
+echo "=== $(date) Dibo kiosk starting ==="
+
 # Prevent duplicate kiosk sessions if autostart triggers twice.
 LOCK_FILE="/tmp/dibo-kiosk.lock"
 exec 9>"$LOCK_FILE"
 if ! flock -n 9; then
+    echo "Another kiosk instance running, exiting."
     exit 0
 fi
 
-# Wait for network and desktop session to settle.
-sleep 10
-
-# Export display for X11
+# Wait for X display to be ready (autostart may run before desktop is up)
 export DISPLAY=:0
+i=0
+while [ "$i" -lt 30 ]; do
+    if xset q &>/dev/null; then
+        echo "X display ready after ${i}s"
+        break
+    fi
+    i=$((i + 1))
+    sleep 1
+done
+if [ "$i" -eq 30 ]; then
+    echo "ERROR: X display not ready after 30s, exiting."
+    exit 1
+fi
+
+# Extra settle time for network and desktop
+sleep 5
 
 # Navigate to repo and app directories
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -127,3 +127,32 @@ What this now does:
 - Restarts the local web server if it stops.
 - Prevents duplicate kiosk sessions on startup.
 - Re-applies `xset` power settings so the display does not blank/lock.
+- Uses both XDG autostart (`.desktop`) and LXDE autostart for reliability.
+- Waits for the X display to be ready before launching (avoids early-exit on slow boot).
+
+## 8. Troubleshooting: App Doesn't Open on Boot
+If the app doesn't start automatically after reboot:
+
+1. **Check the log** (output is written here):
+   ```bash
+   cat /tmp/dibo-kiosk.log
+   ```
+
+2. **Confirm autostart is configured**:
+   ```bash
+   ls -la ~/.config/autostart/dibo-kiosk.desktop
+   cat ~/.config/autostart/dibo-kiosk.desktop
+   ```
+
+3. **Re-run setup and reboot**:
+   ```bash
+   cd ~/dibo
+   ./setup-pi.sh
+   sudo reboot
+   ```
+
+4. **Manual test** (to verify the script works):
+   ```bash
+   cd ~/dibo
+   ./start-kiosk.sh
+   ```

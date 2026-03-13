@@ -68,32 +68,40 @@ npm run build
 cd "$REPO_DIR"
 chmod +x "$REPO_DIR/start-kiosk.sh"
 
-# 6. Setup Autostart
+# 6. Setup Autostart (use both .desktop and lxsession for reliability)
 echo "🚀 Configuring Autostart..."
-AUTOSTART_DIR="/home/$CURRENT_USER/.config/lxsession/LXDE-pi"
-AUTOSTART_FILE="$AUTOSTART_DIR/autostart"
 START_SCRIPT="$REPO_DIR/start-kiosk.sh"
+AUTOSTART_DESKTOP_DIR="/home/$CURRENT_USER/.config/autostart"
+AUTOSTART_DESKTOP="$AUTOSTART_DESKTOP_DIR/dibo-kiosk.desktop"
+LXSESSION_DIR="/home/$CURRENT_USER/.config/lxsession/LXDE-pi"
+LXSESSION_FILE="$LXSESSION_DIR/autostart"
 
-mkdir -p "$AUTOSTART_DIR"
+mkdir -p "$AUTOSTART_DESKTOP_DIR"
+mkdir -p "$LXSESSION_DIR"
 
-# Create file with defaults if it doesn't exist
-if [ ! -f "$AUTOSTART_FILE" ]; then
-    echo "@lxpanel --profile LXDE-pi" > "$AUTOSTART_FILE"
-    echo "@pcmanfm --desktop --profile LXDE-pi" >> "$AUTOSTART_FILE"
-    echo "@xscreensaver -no-splash" >> "$AUTOSTART_FILE"
+# Method 1: XDG autostart .desktop file (most reliable, runs when user session starts)
+cat > "$AUTOSTART_DESKTOP" << EOF
+[Desktop Entry]
+Type=Application
+Name=Dibo Tracker Kiosk
+Exec=$START_SCRIPT
+X-GNOME-Autostart-enabled=true
+EOF
+chmod 644 "$AUTOSTART_DESKTOP"
+echo "Created $AUTOSTART_DESKTOP"
+
+# Method 2: LXDE-pi autostart (backup for Legacy Pi OS)
+if [ ! -f "$LXSESSION_FILE" ]; then
+    echo "@lxpanel --profile LXDE-pi" > "$LXSESSION_FILE"
+    echo "@pcmanfm --desktop --profile LXDE-pi" >> "$LXSESSION_FILE"
+    echo "@xscreensaver -no-splash" >> "$LXSESSION_FILE"
 fi
-
-# Ensure power-saving does not blank/lock the kiosk display.
-grep -q "@xset s off" "$AUTOSTART_FILE" || echo "@xset s off" >> "$AUTOSTART_FILE"
-grep -q "@xset -dpms" "$AUTOSTART_FILE" || echo "@xset -dpms" >> "$AUTOSTART_FILE"
-grep -q "@xset s noblank" "$AUTOSTART_FILE" || echo "@xset s noblank" >> "$AUTOSTART_FILE"
-
-# Ensure kiosk launcher runs at desktop login.
-if grep -q "start-kiosk.sh" "$AUTOSTART_FILE"; then
-    echo "Autostart entry already exists."
-else
-    echo "@bash $START_SCRIPT" >> "$AUTOSTART_FILE"
-    echo "Autostart entry added."
+grep -q "@xset s off" "$LXSESSION_FILE" 2>/dev/null || echo "@xset s off" >> "$LXSESSION_FILE"
+grep -q "@xset -dpms" "$LXSESSION_FILE" 2>/dev/null || echo "@xset -dpms" >> "$LXSESSION_FILE"
+grep -q "@xset s noblank" "$LXSESSION_FILE" 2>/dev/null || echo "@xset s noblank" >> "$LXSESSION_FILE"
+if ! grep -q "start-kiosk.sh" "$LXSESSION_FILE" 2>/dev/null; then
+    echo "@$START_SCRIPT" >> "$LXSESSION_FILE"
+    echo "Added kiosk to LXDE autostart."
 fi
 
 # 7. Screen Configuration
