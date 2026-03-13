@@ -32,7 +32,7 @@ export function LyMeter({ level, onUpdate }: LyMeterProps) {
     <div className="bg-zinc-900/50 backdrop-blur-md border border-zinc-800 rounded-2xl p-5 flex flex-col h-full">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-400">
+          <div className="p-2.5 bg-rose-500/35 border border-rose-500/50 rounded-xl text-rose-200">
             <Skull size={24} className={isUpdating ? 'animate-pulse' : ''} />
           </div>
           <div>
@@ -63,7 +63,7 @@ export function LyMeter({ level, onUpdate }: LyMeterProps) {
       <div className="grid grid-cols-2 gap-4 mt-auto">
         <button
           onClick={() => handleUpdate(-10)}
-          className="py-4 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 hover:border-emerald-500/40 text-emerald-400 font-bold font-mono text-sm uppercase flex flex-col items-center gap-2 transition-all active:scale-[0.98]"
+          className="py-4 rounded-xl bg-emerald-500/35 hover:bg-emerald-500/50 border border-emerald-500/50 hover:border-emerald-500/70 text-emerald-100 font-bold font-mono text-sm uppercase flex flex-col items-center gap-2 transition-all active:scale-[0.98]"
         >
           <ThumbsUp size={20} />
           <span>Ngoan (-10)</span>
@@ -71,7 +71,7 @@ export function LyMeter({ level, onUpdate }: LyMeterProps) {
         
         <button
           onClick={() => handleUpdate(10)}
-          className="py-4 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 hover:border-rose-500/40 text-rose-400 font-bold font-mono text-sm uppercase flex flex-col items-center gap-2 transition-all active:scale-[0.98]"
+          className="py-4 rounded-xl bg-rose-500/35 hover:bg-rose-500/50 border border-rose-500/50 hover:border-rose-500/70 text-rose-100 font-bold font-mono text-sm uppercase flex flex-col items-center gap-2 transition-all active:scale-[0.98]"
         >
           <Zap size={20} />
           <span>Hư (+10)</span>

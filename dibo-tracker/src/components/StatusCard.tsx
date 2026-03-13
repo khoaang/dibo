@@ -21,9 +21,9 @@ export function StatusCard({ title, label, icon: Icon, history, onAction, onRemo
 
   // Color mapping
   const colors: Record<string, string> = {
-    blue: 'text-blue-400 border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20',
-    emerald: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20',
-    rose: 'text-rose-400 border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20',
+    blue: 'text-blue-200 border-blue-500/60 bg-blue-500/35 hover:bg-blue-500/45',
+    emerald: 'text-emerald-200 border-emerald-500/60 bg-emerald-500/35 hover:bg-emerald-500/45',
+    rose: 'text-rose-200 border-rose-500/60 bg-rose-500/35 hover:bg-rose-500/45',
   };
   
   const btnColors: Record<string, string> = {
@@ -71,7 +71,7 @@ export function StatusCard({ title, label, icon: Icon, history, onAction, onRemo
                   </div>
                   <button 
                     onClick={() => onRemove(date)}
-                    className="p-2 text-zinc-600 hover:text-rose-400 hover:bg-rose-400/10 rounded-md transition-colors"
+                    className="p-2 text-zinc-600 hover:text-rose-300 hover:bg-rose-500/30 rounded-md transition-colors"
                   >
                     <X size={16} />
                   </button>

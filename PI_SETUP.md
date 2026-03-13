@@ -110,3 +110,20 @@ If you need to update manually without rebooting:
 1.  SSH into the Pi.
 2.  `cd /home/<your-user>/dibo`
 3.  `./start-kiosk.sh` (This will run the update logic)
+
+## 7. Persistent Kiosk Startup (Important)
+If the Pi ever falls back to the Raspberry Pi desktop, run this once to apply the newest self-recovery startup logic:
+
+```bash
+cd /home/<your-user>/dibo
+git pull
+chmod +x setup-pi.sh start-kiosk.sh
+./setup-pi.sh
+sudo reboot
+```
+
+What this now does:
+- Automatically relaunches Chromium if it is closed or crashes.
+- Restarts the local web server if it stops.
+- Prevents duplicate kiosk sessions on startup.
+- Re-applies `xset` power settings so the display does not blank/lock.

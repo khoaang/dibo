@@ -422,14 +422,14 @@ function App() {
   const walkAgeHours = lastWalk ? (now.getTime() - lastWalk.time.getTime()) / (1000 * 60 * 60) : null;
   const walkStatusClass =
     walkAgeHours === null
-      ? "border-rose-500/50 bg-rose-500/10 text-rose-200"
+      ? "border-rose-500/80 bg-rose-500/35 text-rose-100"
       : walkAgeHours < 4
-        ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-200"
+        ? "border-emerald-500/80 bg-emerald-500/35 text-emerald-100"
         : walkAgeHours < 6
-          ? "border-yellow-500/50 bg-yellow-500/10 text-yellow-200"
+          ? "border-yellow-500/80 bg-yellow-500/35 text-yellow-100"
         : walkAgeHours < 8
-          ? "border-orange-500/50 bg-orange-500/10 text-orange-200"
-          : "border-rose-500/50 bg-rose-500/10 text-rose-200";
+          ? "border-orange-500/80 bg-orange-500/35 text-orange-100"
+          : "border-rose-500/80 bg-rose-500/35 text-rose-100";
   const profileChanged =
     draftProfile.name.trim() !== profile.name || draftProfile.gender !== profile.gender;
   const syncLabel = !isFirebaseConfigured
@@ -440,12 +440,12 @@ function App() {
         ? "Sync: Live"
         : "Sync: Connecting";
   const syncClass = !isFirebaseConfigured
-    ? "border-amber-500/50 bg-amber-500/10 text-amber-200"
+    ? "border-amber-500/80 bg-amber-500/35 text-amber-100"
     : syncError
-      ? "border-rose-500/50 bg-rose-500/10 text-rose-200"
+      ? "border-rose-500/80 bg-rose-500/35 text-rose-100"
       : hasRemoteData
-        ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-200"
-        : "border-amber-500/50 bg-amber-500/10 text-amber-200";
+        ? "border-emerald-500/80 bg-emerald-500/35 text-emerald-100"
+        : "border-amber-500/80 bg-amber-500/35 text-amber-100";
 
   if (view === "settings") {
     return (
@@ -708,7 +708,7 @@ function App() {
               onClick={() => setWalkPee((prev) => !prev)}
               className={`h-13 rounded-lg border px-2 text-xl font-black transition ${
                 walkPee
-                  ? "border-emerald-500 bg-emerald-500/20 text-emerald-300"
+                  ? "border-emerald-500 bg-emerald-500/45 text-emerald-100"
                       : "border-[#6b5a47] bg-[#3a2f24] text-[#d8c4a8] hover:bg-[#4a3c2f]"
               }`}
             >
@@ -718,7 +718,7 @@ function App() {
               onClick={() => setWalkPoop((prev) => !prev)}
               className={`h-13 rounded-lg border px-2 text-xl font-black transition ${
                 walkPoop
-                  ? "border-emerald-500 bg-emerald-500/20 text-emerald-300"
+                  ? "border-emerald-500 bg-emerald-500/45 text-emerald-100"
                       : "border-[#6b5a47] bg-[#3a2f24] text-[#d8c4a8] hover:bg-[#4a3c2f]"
               }`}
             >
@@ -771,27 +771,27 @@ function App() {
 
             <div className="border-t border-[#6b5a47] pt-2">
               <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
-                <div className={`rounded-xl border px-2.5 py-2.5 ${poopedToday ? "border-emerald-500/50 bg-emerald-500/10" : "border-rose-500/50 bg-rose-500/10"}`}>
+                <div className={`rounded-xl border px-2.5 py-2.5 ${poopedToday ? "border-emerald-500/80 bg-emerald-500/35" : "border-rose-500/80 bg-rose-500/35"}`}>
                   <div className="text-base font-semibold text-[#d8c4a8]">Pooped today? 💩</div>
-                  <div className={`text-[clamp(2rem,5vw,2.8rem)] font-black leading-none ${poopedToday ? "text-emerald-300" : "text-rose-300"}`}>
+                  <div className={`text-[clamp(2rem,5vw,2.8rem)] font-black leading-none ${poopedToday ? "text-emerald-100" : "text-rose-100"}`}>
                     {poopedToday ? "✅ YES 💩" : "❌ NO 💩"}
                   </div>
                 </div>
               <button
                 onClick={() => toggleMealEvent("an_sang")}
-                className={`rounded-xl border px-2.5 py-2.5 text-left transition active:scale-[0.99] ${breakfastDoneToday ? "border-emerald-500/50 bg-emerald-500/10" : "border-rose-500/50 bg-rose-500/10"}`}
+                className={`rounded-xl border px-2.5 py-2.5 text-left transition active:scale-[0.99] ${breakfastDoneToday ? "border-emerald-500/80 bg-emerald-500/35" : "border-rose-500/80 bg-rose-500/35"}`}
               >
                   <div className="text-base font-semibold text-[#d8c4a8]">Breakfast 🍳</div>
-                  <div className={`text-[clamp(2rem,5vw,2.8rem)] font-black leading-none ${breakfastDoneToday ? "text-emerald-300" : "text-rose-300"}`}>
+                  <div className={`text-[clamp(2rem,5vw,2.8rem)] font-black leading-none ${breakfastDoneToday ? "text-emerald-100" : "text-rose-100"}`}>
                     {breakfastDoneToday ? "✅ YES 🍳" : "❌ NO 🍳"}
                   </div>
               </button>
               <button
                 onClick={() => toggleMealEvent("an_chieu")}
-                className={`rounded-xl border px-2.5 py-2.5 text-left transition active:scale-[0.99] ${dinnerDoneToday ? "border-emerald-500/50 bg-emerald-500/10" : "border-rose-500/50 bg-rose-500/10"}`}
+                className={`rounded-xl border px-2.5 py-2.5 text-left transition active:scale-[0.99] ${dinnerDoneToday ? "border-emerald-500/80 bg-emerald-500/35" : "border-rose-500/80 bg-rose-500/35"}`}
               >
                   <div className="text-base font-semibold text-[#d8c4a8]">Dinner 🍽️</div>
-                  <div className={`text-[clamp(2rem,5vw,2.8rem)] font-black leading-none ${dinnerDoneToday ? "text-emerald-300" : "text-rose-300"}`}>
+                  <div className={`text-[clamp(2rem,5vw,2.8rem)] font-black leading-none ${dinnerDoneToday ? "text-emerald-100" : "text-rose-100"}`}>
                     {dinnerDoneToday ? "✅ YES 🍽️" : "❌ NO 🍽️"}
                   </div>
               </button>

@@ -76,17 +76,23 @@ START_SCRIPT="$REPO_DIR/start-kiosk.sh"
 
 mkdir -p "$AUTOSTART_DIR"
 
-# Check if entry already exists
-if [ -f "$AUTOSTART_FILE" ] && grep -q "start-kiosk.sh" "$AUTOSTART_FILE"; then
+# Create file with defaults if it doesn't exist
+if [ ! -f "$AUTOSTART_FILE" ]; then
+    echo "@lxpanel --profile LXDE-pi" > "$AUTOSTART_FILE"
+    echo "@pcmanfm --desktop --profile LXDE-pi" >> "$AUTOSTART_FILE"
+    echo "@xscreensaver -no-splash" >> "$AUTOSTART_FILE"
+fi
+
+# Ensure power-saving does not blank/lock the kiosk display.
+grep -q "@xset s off" "$AUTOSTART_FILE" || echo "@xset s off" >> "$AUTOSTART_FILE"
+grep -q "@xset -dpms" "$AUTOSTART_FILE" || echo "@xset -dpms" >> "$AUTOSTART_FILE"
+grep -q "@xset s noblank" "$AUTOSTART_FILE" || echo "@xset s noblank" >> "$AUTOSTART_FILE"
+
+# Ensure kiosk launcher runs at desktop login.
+if grep -q "start-kiosk.sh" "$AUTOSTART_FILE"; then
     echo "Autostart entry already exists."
 else
-    # Create file if it doesn't exist
-    if [ ! -f "$AUTOSTART_FILE" ]; then
-        echo "@lxpanel --profile LXDE-pi" > "$AUTOSTART_FILE"
-        echo "@pcmanfm --desktop --profile LXDE-pi" >> "$AUTOSTART_FILE"
-        echo "@xscreensaver -no-splash" >> "$AUTOSTART_FILE"
-    fi
-    echo "@$START_SCRIPT" >> "$AUTOSTART_FILE"
+    echo "@bash $START_SCRIPT" >> "$AUTOSTART_FILE"
     echo "Autostart entry added."
 fi
 
