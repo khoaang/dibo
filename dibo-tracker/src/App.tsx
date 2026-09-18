@@ -104,6 +104,7 @@ function App() {
   const [showTimeKeypad, setShowTimeKeypad] = useState(false);
   const [walkPee, setWalkPee] = useState(false);
   const [walkPoop, setWalkPoop] = useState(false);
+  const [walkTimeError, setWalkTimeError] = useState<string | null>(null);
 
   const [profile, setProfile] = useState<DogProfile>(DEFAULT_PROFILE);
   const [draftProfile, setDraftProfile] = useState<DogProfile>(DEFAULT_PROFILE);
@@ -242,6 +243,10 @@ function App() {
   }, [view, profile]);
 
   useEffect(() => {
+    setWalkTimeError(null);
+  }, [walkDigits, walkPeriod]);
+
+  useEffect(() => {
     return () => {
       if (lySyncTimeoutRef.current) clearTimeout(lySyncTimeoutRef.current);
     };
@@ -312,6 +317,12 @@ function App() {
     let hours24 = parsedTime.hours % 12;
     if (walkPeriod === "PM") hours24 += 12;
     time.setHours(hours24, parsedTime.minutes, 0, 0);
+
+    // Allow a small grace window for clock skew, but reject anything clearly in the future.
+    if (time.getTime() > Date.now() + 60000) {
+      setWalkTimeError("Can't log a time in the future");
+      return;
+    }
 
     const firestore = db;
 
@@ -735,6 +746,12 @@ function App() {
               💩 Poop: {walkPoop ? "Yes" : "No"}
             </button>
           </div>
+
+          {walkTimeError ? (
+            <div className="mt-2 rounded-lg border border-rose-500/80 bg-rose-500/20 px-3 py-2 text-center text-base font-bold text-rose-200">
+              {walkTimeError}
+            </div>
+          ) : null}
 
           <button
             onClick={saveWalk}
