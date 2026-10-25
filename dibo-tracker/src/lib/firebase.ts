@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore, type Firestore } from "firebase/firestore";
+import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -10,15 +10,9 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-export const isFirebaseConfigured = Object.values(firebaseConfig).every(
+const isConfigured = Object.values(firebaseConfig).every(
   (value) => typeof value === "string" && value.length > 0
 );
 
-let firestoreInstance: Firestore | null = null;
-
-if (isFirebaseConfigured) {
-  const app = initializeApp(firebaseConfig);
-  firestoreInstance = getFirestore(app);
-}
-
-export const db = firestoreInstance;
+// Without a .env the app still works, it just keeps everything in memory.
+export const db = isConfigured ? getFirestore(initializeApp(firebaseConfig)) : null;

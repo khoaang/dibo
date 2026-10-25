@@ -1,60 +1,52 @@
-# Dibo Tracker 🐶
+# Dibo
 
-A dog walk and feeding tracker for Dibo, designed for a Raspberry Pi touch screen.
+A little kiosk for keeping track of our dog: when he was last walked, whether he's
+pooped today, and whether he's had breakfast and dinner. It runs full-screen on a
+Raspberry Pi with a 7" touchscreen by the door, and syncs through Firestore so
+everyone in the house sees the same thing.
 
-## Features
-- **Last Fed**: Tracks the last feeding time.
-- **Last Walk**: Tracks the last walk time.
-- **Good Boy Meter**: A fun meter to track Dibo's behavior.
-- **Touch-friendly UI**: Large buttons and clear text for 7" touch screens (1024x600).
-- **Vietnamese Interface**: All text is in Vietnamese.
+## What's on the screen
 
-## Tech Stack
-- **Frontend**: React + TypeScript + Vite
-- **Styling**: Tailwind CSS v4
-- **Icons**: Lucide React
-- **Date Formatting**: date-fns (Vietnamese locale)
-- **Backend**: Firebase (Firestore)
+- **Last walk**: the time of the last walk, how long ago that was, and a badge that
+  goes from green to yellow, orange, then red as it gets closer to 8 hours.
+- **The dog**: a small pixel chihuahua that reacts to the same thing (happy, antsy,
+  begging for a walk, or asleep at night). Tapping it opens the walk list.
+- **Did he poop / Breakfast / Dinner**: tap Breakfast or Dinner to mark it done, and
+  tap again to undo. Poop comes from the walks logged today.
+- **Lỳ meter**: the slider on the right. Drag it up when he's being stubborn (lỳ)
+  and down when he's being good (ngoan).
 
-## Setup
+"Today" rolls over at **3am**, so a late-night walk still counts toward the evening
+it belongs to. The theme switches to a dim night palette from 7pm to 7am.
 
-1.  **Install Dependencies**:
-    ```bash
-    npm install
-    ```
+## Running it locally
 
-2.  **Configure Firebase**:
-    - Create a Firebase project at [console.firebase.google.com](https://console.firebase.google.com/).
-    - Enable **Firestore Database**.
-    - Copy your web app configuration.
-    - Open `src/lib/firebase.ts` and replace the placeholder config with your own.
+```bash
+npm install
+npm run dev
+```
 
-3.  **Run Development Server**:
-    ```bash
-    npm run dev
-    ```
+Without a `.env`, the app runs in offline mode: everything works, but nothing is
+saved or synced. To connect it to Firebase, create a project with Firestore enabled,
+copy `.env.example` to `.env`, and fill in your web app config.
 
-4.  **Build for Production**:
-    ```bash
-    npm run build
-    ```
+Firestore layout:
 
-## Running on Raspberry Pi
+| Path             | What's in it                                                       |
+| ---------------- | ------------------------------------------------------------------ |
+| `events/*`       | `{ type, time, peed?, pooped? }`, where `type` is `di_bo` (walk), `an_sang` (breakfast) or `an_chieu` (dinner) |
+| `state/ly`       | `{ value }`, the Lỳ meter from 0 to 100                            |
+| `state/profile`  | `{ name, gender }`                                                 |
 
-1.  **Build the app** on your computer.
-2.  **Transfer the `dist` folder** to your Raspberry Pi.
-3.  **Serve the app**:
-    You can use `serve` or any static file server.
-    ```bash
-    npm install -g serve
-    serve -s dist -l 3000
-    ```
-4.  **Open in Kiosk Mode**:
-    Open Chromium on the Pi:
-    ```bash
-    chromium-browser --kiosk http://localhost:3000
-    ```
+## Code layout
 
-## Hardware Support
-Optimized for 7" Raspberry Pi Touch Screen (1024x600).
-Works with Raspberry Pi 4B (Recommended) and Zero 2 W.
+- `src/hooks/useTracker.ts`: all the data, whether from Firestore or in memory
+- `src/hooks/useNow.ts`: a clock that ticks on the minute
+- `src/lib/time.ts`: the 3am day boundary and keypad time parsing
+- `src/components/`: one file per screen, plus the Lỳ meter and the pixel dog
+
+## On the Pi
+
+See [PI_SETUP.md](../PI_SETUP.md). In short, `setup-pi.sh` installs everything and
+sets up autostart, and `start-kiosk.sh` pulls the latest `main` on every boot,
+rebuilds if anything changed, and keeps Chromium open in kiosk mode.
