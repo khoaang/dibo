@@ -1,6 +1,6 @@
-# Raspberry Pi 4B Setup Guide for Dibo Tracker
+# Raspberry Pi setup
 
-This guide will help you set up your Raspberry Pi 4B with the Hosyond 7" Touch Screen to run the Dibo Tracker automatically on boot.
+How to set up a Raspberry Pi 4B with the Hosyond 7" touchscreen so Dibo opens on boot.
 
 ## 1. Hardware Setup
 1.  **Mount the Pi**: Attach your Raspberry Pi 4B to the back of the screen if possible, or place it securely nearby.
@@ -56,10 +56,10 @@ This guide will help you set up your Raspberry Pi 4B with the Hosyond 7" Touch S
     ```
 
 ## 4. Screen Configuration (If Needed)
-If the screen resolution looks wrong (black bars or fuzzy), you need to edit `/boot/config.txt`.
+`setup-pi.sh` does this for you. If the resolution still looks wrong (black bars or blurry), check the config file. It's `/boot/firmware/config.txt` on Bookworm and `/boot/config.txt` on older releases.
 1.  Open the config file:
     ```bash
-    sudo nano /boot/config.txt
+    sudo nano /boot/firmware/config.txt   # or /boot/config.txt
     ```
 2.  Add the following lines to the end of the file (based on Hosyond 7" specs):
     ```ini
@@ -111,8 +111,8 @@ If you need to update manually without rebooting:
 2.  `cd /home/<your-user>/dibo`
 3.  `./start-kiosk.sh` (This will run the update logic)
 
-## 7. Persistent Kiosk Startup (Important)
-If the Pi ever falls back to the Raspberry Pi desktop, run this once to apply the newest self-recovery startup logic:
+## 7. If the Pi boots to the desktop instead
+Pull the latest scripts and re-run setup:
 
 ```bash
 cd /home/<your-user>/dibo
@@ -122,13 +122,9 @@ chmod +x setup-pi.sh start-kiosk.sh
 sudo reboot
 ```
 
-What this now does:
-- Automatically relaunches Chromium if it is closed or crashes.
-- Restarts the local web server if it stops.
-- Prevents duplicate kiosk sessions on startup.
-- Re-applies `xset` power settings so the display does not blank/lock.
-- Uses both XDG autostart (`.desktop`) and LXDE autostart for reliability.
-- Waits for the X display to be ready before launching (avoids early-exit on slow boot).
+`start-kiosk.sh` waits for the desktop and for the clock to sync (the Pi has no
+hardware clock). It then relaunches Chromium if it closes, restarts the local server if
+it dies, and keeps the screen from blanking.
 
 ## 8. Troubleshooting: App Doesn't Open on Boot
 If the app doesn't start automatically after reboot:

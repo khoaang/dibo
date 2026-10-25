@@ -2,7 +2,7 @@
 
 set -u
 
-# Log to file for debugging (remove in production if desired)
+# Boot-time output is otherwise invisible, so keep a log around.
 exec >> /tmp/dibo-kiosk.log 2>&1
 echo "=== $(date) Dibo kiosk starting ==="
 
@@ -14,7 +14,7 @@ if ! flock -n 9; then
     exit 0
 fi
 
-# Wait for X display to be ready (autostart may run before desktop is up)
+# Autostart can fire before the desktop is up.
 export DISPLAY=:0
 i=0
 while [ "$i" -lt 30 ]; do
@@ -30,8 +30,16 @@ if [ "$i" -eq 30 ]; then
     exit 1
 fi
 
-# Extra settle time for network and desktop
-sleep 5
+# The Pi has no hardware clock, so it boots with a stale time until NTP catches up.
+# Wait for that (up to a minute) so the dashboard doesn't show the wrong day or
+# reject walks as being "in the future".
+for _ in $(seq 1 60); do
+    if [ "$(timedatectl show -p NTPSynchronized --value 2>/dev/null)" = "yes" ]; then
+        echo "Clock synced: $(date)"
+        break
+    fi
+    sleep 1
+done
 
 # Navigate to repo and app directories
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

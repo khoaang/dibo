@@ -1,27 +1,26 @@
 #!/bin/bash
 
-# Dibo Tracker - Raspberry Pi Setup Script
-# Run this script on the Raspberry Pi to set up the environment.
+# Sets up a Raspberry Pi to run the Dibo kiosk. Safe to re-run.
 
-set -e # Exit on error
+set -e
 
-echo "🐶 Starting Dibo Tracker Setup..."
+echo "Setting up Dibo..."
 
 # Get the absolute path of the repo root and app directory
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="$REPO_DIR/dibo-tracker"
 CURRENT_USER="$(whoami)"
 
-echo "📂 Repo Directory: $REPO_DIR"
-echo "📂 App Directory: $APP_DIR"
-echo "👤 User: $CURRENT_USER"
+echo "Repo Directory: $REPO_DIR"
+echo "App Directory: $APP_DIR"
+echo "User: $CURRENT_USER"
 
 # 1. Update System
-echo "📦 Updating system packages..."
+echo "Updating system packages..."
 sudo apt update && sudo apt upgrade -y
 
 # 2. Install Node.js
-echo "🟢 Installing Node.js..."
+echo "Installing Node.js..."
 ARCH=$(uname -m)
 if [[ "$ARCH" == "aarch64" ]]; then
     echo "Detected 64-bit architecture."
@@ -40,36 +39,37 @@ else
 fi
 
 # 3. Install Utilities
-echo "🛠 Installing utilities..."
+echo "Installing utilities..."
 sudo apt install -y unclutter git
 
 # 4. Install Global NPM Packages
-echo "🌐 Installing 'serve'..."
+echo "Installing 'serve'..."
 sudo npm install -g serve
 
 # 5. Project Setup
-echo "📂 Setting up project dependencies..."
+echo "Setting up project dependencies..."
 cd "$REPO_DIR"
 
 if [ ! -d "$APP_DIR" ]; then
-    echo "❌ App directory not found at: $APP_DIR"
+    echo "App directory not found at: $APP_DIR"
     echo "Expected repo layout: <repo>/dibo-tracker/package.json"
     exit 1
 fi
 
 cd "$APP_DIR"
 
-echo "📦 Installing npm dependencies..."
+echo "Installing npm dependencies..."
 npm install
-echo "🏗 Building app..."
+echo "Building app..."
 npm run build
 
 # Go back to repo root
 cd "$REPO_DIR"
 chmod +x "$REPO_DIR/start-kiosk.sh"
 
-# 6. Setup Autostart (use both .desktop and lxsession for reliability)
-echo "🚀 Configuring Autostart..."
+# 6. Autostart. Both XDG and LXDE autostart are set up because which one runs
+# depends on the Pi OS version; the lock in start-kiosk.sh stops it running twice.
+echo "Configuring Autostart..."
 START_SCRIPT="$REPO_DIR/start-kiosk.sh"
 AUTOSTART_DESKTOP_DIR="/home/$CURRENT_USER/.config/autostart"
 AUTOSTART_DESKTOP="$AUTOSTART_DESKTOP_DIR/dibo-kiosk.desktop"
@@ -79,7 +79,6 @@ LXSESSION_FILE="$LXSESSION_DIR/autostart"
 mkdir -p "$AUTOSTART_DESKTOP_DIR"
 mkdir -p "$LXSESSION_DIR"
 
-# Method 1: XDG autostart .desktop file (most reliable, runs when user session starts)
 cat > "$AUTOSTART_DESKTOP" << EOF
 [Desktop Entry]
 Type=Application
@@ -90,7 +89,6 @@ EOF
 chmod 644 "$AUTOSTART_DESKTOP"
 echo "Created $AUTOSTART_DESKTOP"
 
-# Method 2: LXDE-pi autostart (backup for Legacy Pi OS)
 if [ ! -f "$LXSESSION_FILE" ]; then
     echo "@lxpanel --profile LXDE-pi" > "$LXSESSION_FILE"
     echo "@pcmanfm --desktop --profile LXDE-pi" >> "$LXSESSION_FILE"
@@ -105,8 +103,10 @@ if ! grep -q "start-kiosk.sh" "$LXSESSION_FILE" 2>/dev/null; then
 fi
 
 # 7. Screen Configuration
-echo "🖥 Configuring Screen (Hosyond 7 inch)..."
-CONFIG_TXT="/boot/config.txt"
+echo "Configuring Screen (Hosyond 7 inch)..."
+# Bookworm moved config.txt into /boot/firmware.
+CONFIG_TXT="/boot/firmware/config.txt"
+[ -f "$CONFIG_TXT" ] || CONFIG_TXT="/boot/config.txt"
 
 if grep -q "hdmi_cvt 1024 600 60 6 0 0 0" "$CONFIG_TXT"; then
     echo "Screen configuration already present."
@@ -123,5 +123,5 @@ display_rotate=0
 EOL
 fi
 
-echo "✅ Setup Complete!"
+echo "Done."
 echo "Please reboot your Pi to start the tracker: sudo reboot"
