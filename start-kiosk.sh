@@ -64,7 +64,9 @@ ensure_latest_build() {
         git pull origin main
         cd "$APP_DIR"
         echo "Rebuilding app..."
-        npm install
+        # npm ci installs exactly what the lockfile says and never rewrites it. npm install
+        # can, and a modified lockfile makes the check above skip every future update.
+        npm ci
         npm run build
         cd "$REPO_DIR"
         echo "Update complete."

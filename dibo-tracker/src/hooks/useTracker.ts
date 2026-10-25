@@ -4,6 +4,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  limit,
   onSnapshot,
   orderBy,
   query,
@@ -36,6 +37,8 @@ export type SyncStatus = "local" | "connecting" | "live" | "error";
 const EVENT_TYPES: EventType[] = ["an_sang", "di_bo", "an_chieu"];
 const DEFAULT_PROFILE: Profile = { name: "Carl", gender: "male" };
 const PROFILE_STORAGE_KEY = "dogProfile";
+// The screen only needs today's events and the last walk; a day is usually ~5 events.
+const RECENT_EVENT_LIMIT = 100;
 
 function normalizeProfile(raw: { name?: unknown; gender?: unknown } | undefined): Profile {
   const name = String(raw?.name ?? "").trim().slice(0, 40);
@@ -83,7 +86,9 @@ export function useTracker() {
     const onError = (error: Error) => setListenerError(error.message);
 
     const unsubEvents = onSnapshot(
-      query(collection(db, "events"), orderBy("time", "desc")),
+      query(collection(db, "events"), orderBy("time", "desc"), limit(RECENT_EVENT_LIMIT)),
+      // Metadata changes tell us when data stops coming from the offline cache.
+      { includeMetadataChanges: true },
       (snapshot) => {
         const next: TrackerEvent[] = [];
         for (const entry of snapshot.docs) {
@@ -99,7 +104,7 @@ export function useTracker() {
           });
         }
         setEvents(next);
-        setConnected(true);
+        setConnected(!snapshot.metadata.fromCache);
       },
       onError
     );

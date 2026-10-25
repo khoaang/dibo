@@ -59,7 +59,7 @@ fi
 cd "$APP_DIR"
 
 echo "Installing npm dependencies..."
-npm install
+npm ci
 echo "Building app..."
 npm run build
 
