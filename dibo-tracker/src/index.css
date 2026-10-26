@@ -77,24 +77,16 @@
 }
 
 :root {
-  /* Scales with the screen; the Pi renders at 1.6x, so the kiosk sees roughly 640x375. */
-  font-size: clamp(15px, 1.4vw + 0.6rem, 22px);
+  /*
+   * Everything is sized in rem, and rem follows the window, so the whole layout scales
+   * together instead of spreading out on bigger screens. It was designed at 640x375
+   * (the 7" panel at Chromium's 1.6x zoom), where this comes out to 17px.
+   */
+  font-size: clamp(15px, min(2.65vw, 4.55vh), 40px);
   line-height: 1.4;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   font-feature-settings: "cv11", "ss01";
-}
-
-@media (pointer: coarse) and (max-width: 1100px) {
-  :root {
-    font-size: clamp(17px, 2.6vw, 24px);
-  }
-}
-
-@media (pointer: fine) and (min-width: 1280px) {
-  :root {
-    font-size: clamp(16px, 1vw + 0.5rem, 20px);
-  }
 }
 
 body {

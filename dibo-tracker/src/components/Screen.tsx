@@ -18,7 +18,7 @@ export function Screen({ title, onClose, children }: ScreenProps) {
           aria-label="Close"
           className="-mr-1 inline-flex size-12 shrink-0 items-center justify-center rounded-full bg-surface text-muted active:bg-surface-press"
         >
-          <X size={24} />
+          <X className="size-6" />
         </button>
       </header>
       {children}

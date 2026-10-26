@@ -129,7 +129,7 @@ export function WalkEditor({ walk, onSave, onClose }: WalkEditorProps) {
               0
             </button>
             <button onClick={backspace} aria-label="Backspace" className={`${keyClass} flex items-center justify-center text-muted`}>
-              <Delete size={28} />
+              <Delete className="size-7" />
             </button>
           </div>
         </div>

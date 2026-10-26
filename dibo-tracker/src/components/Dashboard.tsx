@@ -99,7 +99,7 @@ export function Dashboard({
               aria-label="Settings"
               className="inline-flex size-11 items-center justify-center rounded-full text-faint active:bg-surface"
             >
-              <Settings size={20} />
+              <Settings className="size-5" />
             </button>
           </div>
         </div>
@@ -120,7 +120,7 @@ export function Dashboard({
               className="flex min-h-14 min-w-32 flex-1 items-center justify-center gap-1 rounded-2xl bg-accent text-xl font-extrabold text-on-accent active:bg-accent-press"
             >
               Walks
-              <ChevronRight size={24} strokeWidth={2.75} />
+              <ChevronRight className="size-6" strokeWidth={2.75} />
             </button>
           </div>
         </div>

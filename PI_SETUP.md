@@ -11,8 +11,9 @@ settings, set the hostname to `dibo-pi`, turn on SSH, and set up Wi-Fi, a user a
 the time zone. Get the time zone right, since the day reset and the theme go off the
 Pi's local time.
 
-The kiosk script needs X11. On Bookworm, run `sudo raspi-config`, go to Advanced
-Options > Wayland, pick X11 and reboot.
+The default Bookworm desktop (Wayland) works. The app scales to whatever resolution
+the Pi sends, so it fills the screen even though Bookworm drives this panel at 1080p
+and lets the panel scale it down.
 
 ## Install
 
@@ -35,7 +36,7 @@ sudo reboot
 ```
 
 `setup-pi.sh` installs Node, `serve` and `unclutter`, builds the app, and sets up
-autostart and the screen resolution. Rerunning it is harmless.
+autostart. Rerunning it is harmless.
 
 After that, `start-kiosk.sh` runs on every login. It waits for the clock to sync,
 pulls `main` and rebuilds if anything changed, serves the app on port 3000, and keeps
@@ -66,15 +67,9 @@ If the log says "Local changes detected", run `git status` on the Pi. If it's on
 "Offline" on the screen means `.env` is missing on the Pi. "Not syncing" usually
 means the Firestore rules are rejecting it, and Settings shows the actual error.
 
-If the picture is stretched or blurry, check that `config.txt` (in `/boot/firmware/`
-on Bookworm, `/boot/` on older versions) ends with:
-
-```ini
-hdmi_group=2
-hdmi_mode=87
-hdmi_cvt 1024 600 60 6 0 0 0
-hdmi_drive=1
-```
+On older Raspberry Pi OS releases (Bullseye and earlier), the resolution comes from
+the `hdmi_cvt 1024 600 60 6 0 0 0` line that `setup-pi.sh` adds to `config.txt`.
+Bookworm ignores it.
 
 Running `start-kiosk.sh` by hand does nothing while the kiosk is already running,
 because of the lock file.

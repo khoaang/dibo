@@ -22,7 +22,7 @@ export function WalkList({ walks, onNew, onEdit, onDelete, onClose }: WalkListPr
         onClick={onNew}
         className="mb-2 inline-flex h-14 w-full shrink-0 items-center justify-center gap-2 rounded-2xl bg-accent text-xl font-extrabold text-on-accent active:bg-accent-press"
       >
-        <Plus size={24} strokeWidth={2.75} />
+        <Plus className="size-6" strokeWidth={2.75} />
         Log a walk
       </button>
 
@@ -42,7 +42,7 @@ export function WalkList({ walks, onNew, onEdit, onDelete, onClose }: WalkListPr
                 onClick={() => onEdit(walk)}
                 className="inline-flex h-12 w-28 items-center justify-center gap-2 rounded-xl bg-surface text-lg font-semibold active:bg-surface-press"
               >
-                <Pencil size={18} />
+                <Pencil className="size-4.5" />
                 Edit
               </button>
               {confirmingId === walk.id ? (
@@ -59,7 +59,7 @@ export function WalkList({ walks, onNew, onEdit, onDelete, onClose }: WalkListPr
                   aria-label="Delete walk"
                   className="inline-flex h-12 w-28 items-center justify-center rounded-xl bg-surface text-on-alert active:bg-surface-press"
                 >
-                  <Trash2 size={20} />
+                  <Trash2 className="size-5" />
                 </button>
               )}
             </li>
