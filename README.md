@@ -2,7 +2,9 @@
 
 ![The pixel dog from the dashboard, in each of its moods](docs/moods.gif)
 
-Dog tracker for Carl. It runs on a Raspberry Pi with a 7" touchscreen by the door so
+Dog tracker for Carl. The name is from "đi bộ", which is Vietnamese for "to walk".
+
+It runs on a Raspberry Pi with a 7" touchscreen by the door so
 we can see at a glance when he was last walked and whether he's eaten and pooped
 today. It syncs through Firestore, so a walk logged from another device shows up on
 the screen too.
