@@ -35,7 +35,7 @@ function dogMood(hoursSinceWalk: number | null, now: Date): DogMood {
 
 const DOG_SAYS: Record<DogMood, string> = {
   happy: "All good!",
-  antsy: "Walk soon?",
+  antsy: "Walk?",
   needs: "Walk me!",
   sleepy: "Zzz…",
 };
@@ -71,7 +71,7 @@ export function Dashboard({
   return (
     <div className="flex h-dvh gap-5 py-4 pl-5 pr-3">
       <main className="flex min-w-0 flex-1 flex-col justify-between">
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start justify-between gap-3">
           <div>
             <Label>
               Now
@@ -81,18 +81,18 @@ export function Dashboard({
                 </span>
               )}
             </Label>
-            <div className="text-[clamp(2.75rem,min(15vh,12vw),8rem)] whitespace-nowrap font-extrabold leading-none tracking-tight tabular-nums">
+            <div className="text-[clamp(2.75rem,min(16vh,12.3vw),9rem)] whitespace-nowrap font-extrabold leading-none tracking-tight tabular-nums">
               {formatClock(now)}
             </div>
           </div>
 
           <div className="-mr-2 -mt-2 flex items-start">
-            <button onClick={onOpenWalks} className="flex items-center gap-3 pt-2" aria-label={`${profile.name}: ${DOG_SAYS[mood]}`}>
-              <span className="relative rounded-xl bg-surface px-3 py-1.5 text-base font-bold text-ink max-[520px]:hidden">
+            <button onClick={onOpenWalks} className="flex items-center gap-2 pt-2" aria-label={`${profile.name}: ${DOG_SAYS[mood]}`}>
+              <span className="relative whitespace-nowrap rounded-xl bg-surface px-3 py-1.5 text-base font-bold text-ink max-[520px]:hidden">
                 {DOG_SAYS[mood]}
                 <span className="absolute -right-1 top-1/2 size-2.5 -translate-y-1/2 rotate-45 rounded-[2px] bg-surface" />
               </span>
-              <PixelDog mood={mood} className="h-[clamp(4.25rem,21vh,9rem)]" />
+              <PixelDog mood={mood} className="h-[clamp(4.25rem,24vh,11rem)]" />
             </button>
             <button
               onClick={onOpenSettings}
@@ -111,13 +111,13 @@ export function Dashboard({
           </Label>
           <div className="flex flex-wrap gap-3">
             <div
-              className={`shrink-0 whitespace-nowrap rounded-2xl px-4 py-1.5 text-[clamp(3rem,min(18vh,13vw),10rem)] font-extrabold leading-none tracking-tight tabular-nums ${walkTone(hoursSinceWalk)}`}
+              className={`shrink-0 whitespace-nowrap rounded-2xl px-4 py-1.5 text-[clamp(3rem,min(21vh,14vw),12rem)] font-extrabold leading-none tracking-tight tabular-nums ${walkTone(hoursSinceWalk)}`}
             >
               {lastWalk ? formatClock(lastWalk.time) : "None yet"}
             </div>
             <button
               onClick={onOpenWalks}
-              className="flex min-h-14 min-w-32 flex-1 items-center justify-center gap-1 rounded-2xl bg-accent text-xl font-extrabold text-on-accent active:bg-accent-press"
+              className="flex min-h-14 min-w-28 flex-1 items-center justify-center gap-1 rounded-2xl bg-accent text-2xl font-extrabold text-on-accent active:bg-accent-press"
             >
               Walks
               <ChevronRight className="size-6" strokeWidth={2.75} />
@@ -149,8 +149,8 @@ function StatusTile({ label, done, onClick }: { label: string; done: boolean; on
         done ? "bg-good text-on-good" : "bg-alert text-on-alert"
       }`}
     >
-      <div className="truncate text-base font-semibold opacity-80">{label}</div>
-      <div className="text-[clamp(1.5rem,5vw,2.5rem)] font-extrabold leading-tight">{done ? "Yes" : "Not yet"}</div>
+      <div className="truncate text-lg font-semibold opacity-80">{label}</div>
+      <div className="text-[clamp(1.5rem,min(9.5vh,5.6vw),3rem)] font-extrabold leading-tight">{done ? "Yes" : "Not yet"}</div>
     </button>
   );
 }

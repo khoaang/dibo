@@ -17,7 +17,7 @@ export function LyMeter({ level, onChange }: LyMeterProps) {
   };
 
   return (
-    <aside className="flex w-14 shrink-0 flex-col items-center text-sm font-extrabold">
+    <aside className="flex w-14 shrink-0 flex-col items-center text-base font-extrabold">
       <div className="text-on-alert">Lỳ</div>
       {/* The whole column is the touch target, not just the thin bar. */}
       <div
@@ -34,7 +34,7 @@ export function LyMeter({ level, onChange }: LyMeterProps) {
       >
         <div className="h-full w-2.5 rounded-full bg-linear-to-b from-rose-400 via-amber-300 to-emerald-400" />
         <div
-          className="pointer-events-none absolute left-1/2 h-4 w-11 -translate-x-1/2 -translate-y-1/2 rounded-full bg-ink shadow-md ring-[3px] ring-canvas"
+          className="pointer-events-none absolute left-1/2 h-5 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full bg-ink shadow-md ring-[3px] ring-canvas"
           style={{ top: `${100 - level}%` }}
         />
       </div>
