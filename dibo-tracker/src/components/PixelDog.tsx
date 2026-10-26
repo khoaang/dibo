@@ -46,8 +46,8 @@ const mirror = (pixels: Pixel[]): Pixel[] => pixels.flatMap(([r, c, k]) => [[r, 
 
 // Per-mood changes to the face, given for the left half and mirrored.
 const FACES: Record<DogMood, Pixel[]> = {
-  // Smile with the tongue out.
-  happy: mirror([[10, 10, "O"], [11, 11, "P"]]),
+  // Open smile with the tongue out: corners up at the sides, tongue in the middle.
+  happy: mirror([[10, 9, "O"], [11, 10, "O"], [11, 11, "P"]]),
   // Flat little mouth.
   antsy: mirror([[11, 11, "O"]]),
   // Worried brows, raised in the middle.
