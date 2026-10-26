@@ -6,7 +6,7 @@ type SettingsProps = {
   profile: Profile;
   syncStatus: SyncStatus;
   syncError: string | null;
-  onSave: (profile: Profile) => Promise<void>;
+  onSave: (profile: Profile) => void;
   onClose: () => void;
 };
 
@@ -25,12 +25,12 @@ const GENDERS: { value: Gender; label: string }[] = [
 export function Settings({ profile, syncStatus, syncError, onSave, onClose }: SettingsProps) {
   const [name, setName] = useState(profile.name);
   const [gender, setGender] = useState(profile.gender);
-  const [saving, setSaving] = useState(false);
   const changed = name.trim() !== profile.name || gender !== profile.gender;
 
-  const save = async () => {
-    setSaving(true);
-    await onSave({ name, gender });
+  // Firestore applies the change locally right away, so there's no need to wait for the
+  // server (which would hang here if the Pi happened to be offline).
+  const save = () => {
+    onSave({ name, gender });
     onClose();
   };
 
@@ -66,10 +66,10 @@ export function Settings({ profile, syncStatus, syncError, onSave, onClose }: Se
 
         <button
           onClick={save}
-          disabled={!changed || saving}
+          disabled={!changed}
           className="h-12 w-full rounded-xl bg-accent text-base font-extrabold text-on-accent transition disabled:bg-surface-press disabled:text-faint"
         >
-          {saving ? "Saving…" : "Save"}
+          Save
         </button>
 
         <p className="text-sm text-muted">

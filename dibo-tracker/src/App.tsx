@@ -23,6 +23,7 @@ function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
   const goHome = () => setView({ name: "dashboard" });
   const goWalks = () => setView({ name: "walks" });
 

@@ -195,12 +195,12 @@ export function useTracker() {
     }, 120);
   };
 
-  const saveProfile = async (next: Profile) => {
+  const saveProfile = (next: Profile) => {
     const normalized = normalizeProfile(next);
     setProfile(normalized);
     cacheProfile(normalized);
     if (!db) return;
-    await write(setDoc(doc(db, "state", "profile"), { ...normalized, updatedAt: Timestamp.now() }, { merge: true }));
+    write(setDoc(doc(db, "state", "profile"), { ...normalized, updatedAt: Timestamp.now() }, { merge: true }));
   };
 
   const syncError = listenerError ?? writeError;

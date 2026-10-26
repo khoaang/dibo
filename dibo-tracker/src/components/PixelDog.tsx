@@ -39,11 +39,12 @@ const LEFT_HALF = [
 
 const BASE = LEFT_HALF.map((half) => half + [...half].reverse().join(""));
 
-// Per-mood pixel overrides as [row, col, color], given for the left half and mirrored.
+// [row, col, color]
 type Pixel = [number, number, string];
 
 const mirror = (pixels: Pixel[]): Pixel[] => pixels.flatMap(([r, c, k]) => [[r, c, k], [r, 23 - c, k]] as Pixel[]);
 
+// Per-mood changes to the face, given for the left half and mirrored.
 const FACES: Record<DogMood, Pixel[]> = {
   // Smile with the tongue out.
   happy: mirror([[10, 10, "O"], [11, 11, "P"]]),
