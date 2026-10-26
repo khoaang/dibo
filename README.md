@@ -2,51 +2,63 @@
 
 A little kiosk for keeping track of our dog: when he was last walked, whether he's
 pooped today, and whether he's had breakfast and dinner. It runs full-screen on a
-Raspberry Pi with a 7" touchscreen by the door, and syncs through Firestore so
-everyone in the house sees the same thing.
+Raspberry Pi with a 7" touchscreen by the door and syncs through Firestore, so
+anyone who logs a walk from another device shows up on the screen too.
 
 ## What's on the screen
 
-- **Last walk**: the time of the last walk, how long ago that was, and a badge that
-  goes from green to yellow, orange, then red as it gets closer to 8 hours.
-- **The dog**: a small pixel chihuahua that reacts to the same thing (happy, antsy,
-  begging for a walk, or asleep at night). Tapping it opens the walk list.
-- **Did he poop / Breakfast / Dinner**: tap Breakfast or Dinner to mark it done, and
-  tap again to undo. Poop comes from the walks logged today.
-- **Lỳ meter**: the slider on the right. Drag it up when he's being stubborn (lỳ)
-  and down when he's being good (ngoan).
+- **Last walk.** The time of the last walk and how long ago it was. The badge goes
+  from green to yellow at 4 hours, orange at 6, and red at 8.
+- **The dog.** A pixel chihuahua that follows the same clock: happy after a walk,
+  antsy after 4 hours, hopping and asking to go out after 8, asleep late at night.
+  Tap it to open the walk list.
+- **Did he poop / Breakfast / Dinner.** Tap Breakfast or Dinner to mark it, tap again
+  to undo. Poop is filled in from the walks logged today.
+- **Lỳ meter.** The slider on the right. Up when he's being stubborn (lỳ), down when
+  he's being good (ngoan).
 
-"Today" rolls over at **3am**, so a late-night walk still counts toward the evening
-it belongs to. The theme switches to a dim night palette from 7pm to 7am.
+A day runs from 3am to 3am, so a midnight walk still counts toward the evening it
+belongs to. The screen uses a light theme from 7am to 7pm and a dim one at night.
+All of these are constants in `src/lib/time.ts`, `src/lib/theme.ts` and
+`src/components/Dashboard.tsx`.
 
-## Running it locally
+## Running it
+
+The app lives in `dibo-tracker/`.
 
 ```bash
+cd dibo-tracker
 npm install
 npm run dev
 ```
 
-Without a `.env`, the app runs in offline mode: everything works, but nothing is
-saved or synced. To connect it to Firebase, create a project with Firestore enabled,
-copy `.env.example` to `.env`, and fill in your web app config.
+Without a `.env` it runs offline: everything works, but nothing is saved. To sync,
+create a Firebase project with Firestore, copy `.env.example` to `.env` and fill in
+the web app config. `.env` is gitignored.
 
-Firestore layout:
+The data is small:
 
-| Path             | What's in it                                                       |
-| ---------------- | ------------------------------------------------------------------ |
-| `events/*`       | `{ type, time, peed?, pooped? }`, where `type` is `di_bo` (walk), `an_sang` (breakfast) or `an_chieu` (dinner) |
-| `state/ly`       | `{ value }`, the Lỳ meter from 0 to 100                            |
-| `state/profile`  | `{ name, gender }`                                                 |
+| Path            | Contents                                                                        |
+| --------------- | ------------------------------------------------------------------------------- |
+| `events/*`      | `{ type, time, peed?, pooped? }`, with `type` one of `di_bo` (walk), `an_sang` (breakfast), `an_chieu` (dinner) |
+| `state/ly`      | `{ value }`, the Lỳ meter, 0 to 100                                            |
+| `state/profile` | `{ name, gender }`                                                              |
 
-## Code layout
+There's no login, so your Firestore security rules are the only thing standing
+between the database and anyone who has your config. Don't leave a project on the
+default test-mode rules: they either expire (and sync stops) or allow anyone in.
 
-- `src/hooks/useTracker.ts`: all the data, whether from Firestore or in memory
-- `src/hooks/useNow.ts`: a clock that ticks on the minute
+## Code
+
+- `src/hooks/useTracker.ts`: all reads and writes, from Firestore or in memory
+- `src/hooks/useNow.ts`: a clock that ticks over on the minute
 - `src/lib/time.ts`: the 3am day boundary and keypad time parsing
 - `src/components/`: one file per screen, plus the Lỳ meter and the pixel dog
 
+`npm run lint` and `npm run build` should both pass before pushing, since the Pi
+builds whatever is on `main`.
+
 ## On the Pi
 
-See [PI_SETUP.md](../PI_SETUP.md). In short, `setup-pi.sh` installs everything and
-sets up autostart, and `start-kiosk.sh` pulls the latest `main` on every boot,
-rebuilds if anything changed, and keeps Chromium open in kiosk mode.
+[PI_SETUP.md](PI_SETUP.md) covers the whole setup. Once it's running, the Pi pulls
+`main` and rebuilds on every boot, so deploying is: push, then reboot the Pi.
