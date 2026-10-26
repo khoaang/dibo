@@ -86,22 +86,14 @@ export function Dashboard({
             </div>
           </div>
 
-          <div className="-mr-2 -mt-2 flex items-start">
-            <button onClick={onOpenWalks} className="flex items-center gap-2 pt-2" aria-label={`${profile.name}: ${DOG_SAYS[mood]}`}>
-              <span className="relative whitespace-nowrap rounded-xl bg-surface px-3 py-1.5 text-base font-bold text-ink max-[520px]:hidden">
-                {DOG_SAYS[mood]}
-                <span className="absolute -right-1 top-1/2 size-2.5 -translate-y-1/2 rotate-45 rounded-[2px] bg-surface" />
-              </span>
-              <PixelDog mood={mood} className="h-[clamp(4.25rem,24vh,11rem)]" />
-            </button>
-            <button
-              onClick={onOpenSettings}
-              aria-label="Settings"
-              className="inline-flex size-11 items-center justify-center rounded-full text-faint active:bg-surface"
-            >
-              <Settings className="size-5" />
-            </button>
-          </div>
+          <button onClick={onOpenWalks} className="flex items-center gap-2" aria-label={`${profile.name}: ${DOG_SAYS[mood]}`}>
+            <span className="relative whitespace-nowrap rounded-xl bg-surface px-3 py-1.5 text-base font-bold text-ink max-[520px]:hidden">
+              {DOG_SAYS[mood]}
+              <span className="absolute -right-1 top-1/2 size-2.5 -translate-y-1/2 rotate-45 rounded-[2px] bg-surface" />
+            </span>
+            {/* Hangs into the empty space beside the "last walk" label without pushing it down. */}
+            <PixelDog mood={mood} className="-mb-[4vh] h-[clamp(4.25rem,28vh,13rem)]" />
+          </button>
         </div>
 
         <div>
@@ -132,7 +124,16 @@ export function Dashboard({
         </div>
       </main>
 
-      <LyMeter level={lyLevel} onChange={onLyChange} />
+      <div className="flex w-14 shrink-0 flex-col items-center">
+        <button
+          onClick={onOpenSettings}
+          aria-label="Settings"
+          className="-mt-1 mb-1 inline-flex size-11 shrink-0 items-center justify-center rounded-full text-faint active:bg-surface"
+        >
+          <Settings className="size-5" />
+        </button>
+        <LyMeter level={lyLevel} onChange={onLyChange} />
+      </div>
     </div>
   );
 }

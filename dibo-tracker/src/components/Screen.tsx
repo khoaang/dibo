@@ -1,5 +1,6 @@
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
+import { useDragScroll } from "../hooks/useDragScroll";
 
 type ScreenProps = {
   title: ReactNode;
@@ -9,8 +10,11 @@ type ScreenProps = {
 
 /** Full-screen sub-page with a title and a close button. */
 export function Screen({ title, onClose, children }: ScreenProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useDragScroll(scrollRef);
+
   return (
-    <div className="flex h-dvh flex-col overflow-y-auto px-5 pb-4 pt-3">
+    <div ref={scrollRef} className="flex h-dvh flex-col overflow-y-auto px-5 pb-4 pt-3">
       <header className="mb-3 flex items-center justify-between gap-4">
         <h1 className="min-w-0 truncate text-2xl font-extrabold tracking-tight">{title}</h1>
         <button
